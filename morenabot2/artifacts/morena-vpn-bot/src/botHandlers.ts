@@ -266,8 +266,8 @@ export function setupBotHandlers(bot: Bot): void {
 
       const usdtAmount = (finalPrice / USDT_RUB_RATE).toFixed(2);
       const priceText = discount > 0
-        ? `${tariff.priceRub} ₽ − ${discount} ₽ бонус = *${usdtAmount} USDT*`
-        : `*${usdtAmount} USDT* (~${escapeMarkdown(finalPrice.toString())} ₽)`;
+        ? `${tariff.priceRub} ₽ − ${discount} ₽ бонус = *${escapeMarkdown(usdtAmount)} USDT*`
+        : `*${escapeMarkdown(usdtAmount)} USDT* ${escapeMarkdown(`(~${finalPrice} ₽)`)}`;
 
       const keyboard = new InlineKeyboard()
         .url("💳 Оплатить", invoice.pay_url).row()
@@ -749,7 +749,7 @@ export function setupBotHandlers(bot: Bot): void {
         caption:
           `🧾 *Продление подписки*\n\n` +
           `📦 Тариф: *${escapeMarkdown(tariff.label)}*\n` +
-          `💰 Сумма: *${usdtAmount} USDT* (~${escapeMarkdown(finalPrice.toString())} ₽)`,
+          `💰 Сумма: *${escapeMarkdown(usdtAmount)} USDT* ${escapeMarkdown(`(~${finalPrice} ₽)`)}`,
 
         parse_mode: "MarkdownV2",
         reply_markup: keyboard,
