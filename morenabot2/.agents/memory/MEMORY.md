@@ -1,0 +1,5 @@
+- [SQLite path in api-server](sqlite-path-api-server.md) — CWD в api-server = корень монорепо, НО при запуске из workflow — `artifacts/api-server`; нужно детектировать.
+- [better-sqlite3 install](better-sqlite3-install.md) — требует одобрения build script через `onlyBuiltDependencies` в `pnpm-workspace.yaml`.
+- [Orval codegen duplicate exports](orval-codegen-fix.md) — removing `schemas` option from zod orval config prevents TS2308 duplicate export crashes permanently.
+- [Telegram Login Widget domain](telegram-widget-domain.md) — widget shows "Bot domain invalid" in dev; needs BotFather /setdomain with the deployed domain to work in production.
+- [Express-session typing](express-session-typing.md) — use module augmentation of `express-session` and `req.session.fieldName` directly; `Express.SessionData` global namespace doesn't exist with `"types": ["node"]`.

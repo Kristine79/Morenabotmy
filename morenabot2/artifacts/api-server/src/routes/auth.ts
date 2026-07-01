@@ -1,0 +1,126 @@
+/**
+ * Auth routes — аутентификация через Telegram Login Widget
+ * Верификация hash (HMAC-SHA256 на основе BOT_TOKEN) + проверка ADMIN_TELEGRAM_ID
+ */
+
+import { Router, type IRouter, type Request, type Response } from "express";
+import crypto from "node:crypto";
+import {
+  GetAuthConfigResponse,
+  TelegramLoginBody,
+  TelegramLoginResponse,
+  GetAuthMeResponse,
+  LogoutResponse,
+} from "@workspace/api-zod";
+import "../types/session.d.ts";
+
+const router: IRouter = Router();
+
+/**
+ * Проверяет подпись данных Telegram Login Widget
+ * https://core.telegram.org/widgets/login#checking-authorization
+ */
+function verifyTelegramHash(data: Record<string, string>, botToken: string): boolean {
+  const { hash, ...rest } = data;
+  if (!hash) return false;
+
+  const checkString = Object.entries(rest)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join("\n");
+
+  const secretKey = crypto.createHash("sha256").update(botToken).digest();
+  const expectedHash = crypto.createHmac("sha256", secretKey).update(checkString).digest("hex");
+
+  return expectedHash === hash;
+}
+
+// ─── GET /auth/config ─────────────────────────────────────────────────────────
+
+router.get("/auth/config", (_req: Request, res: Response): void => {
+  const botUsername = process.env.BOT_USERNAME ?? "morenavpn_bot";
+  res.json(GetAuthConfigResponse.parse({ botUsername }));
+});
+
+// ─── POST /auth/login ─────────────────────────────────────────────────────────
+
+router.post("/auth/login", (req: Request, res: Response): void => {
+  const parsed = TelegramLoginBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Неверные данные" });
+    return;
+  }
+
+  const authData = parsed.data;
+
+  const botToken = process.env.BOT_TOKEN;
+  if (!botToken) { res.status(500).json({ error: "Сервер не настроен" }); return; }
+
+  const adminIdStr = process.env.ADMIN_TELEGRAM_ID;
+  if (!adminIdStr) { res.status(500).json({ error: "Сервер не настроен" }); return; }
+  const adminId = Number(adminIdStr);
+
+  // Преобразуем данные в строки для проверки hash
+  const dataForVerify: Record<string, string> = {};
+  for (const [k, v] of Object.entries(authData)) {
+    if (v !== undefined && v !== null) {
+      dataForVerify[k] = String(v);
+    }
+  }
+
+  // Проверяем подпись Telegram
+  if (!verifyTelegramHash(dataForVerify, botToken)) {
+    res.status(401).json({ error: "Неверная подпись данных Telegram" });
+    return;
+  }
+
+  // auth_date не должен быть старше суток
+  const now = Math.floor(Date.now() / 1000);
+  if (now - authData.auth_date > 86400) {
+    res.status(401).json({ error: "Данные авторизации устарели" });
+    return;
+  }
+
+  // Только ADMIN
+  if (authData.id !== adminId) {
+    res.status(403).json({ error: "Доступ запрещён: вы не являетесь администратором" });
+    return;
+  }
+
+  req.session.userId = authData.id;
+  req.session.firstName = authData.first_name ?? "Admin";
+  req.session.username = authData.username;
+
+  res.json(TelegramLoginResponse.parse({
+    id: authData.id,
+    firstName: authData.first_name ?? "Admin",
+    username: authData.username,
+    lastName: authData.last_name,
+  }));
+});
+
+// ─── GET /auth/me ─────────────────────────────────────────────────────────────
+
+router.get("/auth/me", (req: Request, res: Response): void => {
+  if (!req.session.userId) {
+    res.status(401).json({ error: "Не авторизован" });
+    return;
+  }
+
+  res.json(GetAuthMeResponse.parse({
+    id: req.session.userId,
+    firstName: req.session.firstName ?? "Admin",
+    username: req.session.username,
+  }));
+});
+
+// ─── POST /auth/logout ────────────────────────────────────────────────────────
+
+router.post("/auth/logout", (req: Request, res: Response): void => {
+  req.session.destroy(() => {
+    res.clearCookie("morena_admin_sid");
+    res.json(LogoutResponse.parse({ ok: true }));
+  });
+});
+
+export default router;

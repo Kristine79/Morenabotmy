@@ -1,0 +1,39 @@
+Роль: Senior Fullstack Developer (Node.js, TypeScript, grammY, Prisma ORM).
+
+Задача: Напиши готовый код для Telegram-бота "Morena VPN", который работает на стеке TypeScript и Node.js. Бот должен быть полностью автономным, интегрированным с API RoyaltyKey и крипто-процессингом CryptoBot для приема рублей через СБП.
+
+Архитектура проекта:
+- База данных: SQLite через Prisma ORM.
+- Фреймворк бота: grammY (TypeScript).
+- HTTP-клиент: axios.
+
+Требования к базе данных (prisma/schema.prisma):
+1. Модель User: id (BigInt, PK), username (String?), balance (Int, дефолт 0), referredById (BigInt?), hasUsedTrial (Boolean, дефолт false).
+2. Модель Subscription: id (String, PK - из API), telegramUserId (BigInt), vpnKey (String), tariffId (String), expiresAt (DateTime).
+3. Модель Promocode: id (String, PK), bonusAmount (Int), maxUses (Int), usesCount (Int).
+4. Модель UsedPromocode: id (Int, PK, autoincrement), userId (BigInt), promocodeId (String). Уникальный индекс @@unique([userId, promocodeId]).
+5. Модель Payment: id (String, PK), telegramUserId (BigInt), tariffId (String), amount (Int), status (String).
+
+Функционал, который должен быть реализован в коде:
+
+1. МОДУЛЬ API ROYALTYKEY (royaltyKeyApi.ts):
+Класс с методами, использующий токен из process.env.ROYALTYKEY_API_KEY. Методы:
+- getProfile(): запрашивает баланс реселлера и скидку.
+- createVPNUser(tariffId, tgUserId): создает пользователя за один запрос.
+- renewSubscription(vpnUserId, tariffId): продлевает ключ.
+
+2. МОДУЛЬ ПЛАТЕЖЕЙ CRYPTOBOT (cryptoBotApi.ts):
+Класс для работы с API CryptoBot (токен process.env.CRYPTO_BOT_TOKEN, поддержка testnet/mainnet через флаг). Метод createRubInvoice(amountRub, payload) создает счет в рублях (asset: 'USDT', fiat: 'RUB', currency_type: 'fiat'), возвращает pay_url и invoice_id. Метод getInvoiceStatus(invoiceId) возвращает статус счета.
+
+3. ОСНОВНОЙ КОД БОТА (bot.ts):
+- Навигация: Главное меню с инлайн-кнопками: "🔮 Активировать тест (24ч)", "⚡ Купить Morena VPN", "👤 Личный чертог", "🎟️ Активировать промокод", "ℹ️ Инструкция по настройке".
+- Команда /start: Ловит реферальный хвост вида /start ref_ID. Если юзер новый, записывает его в БД, а пригласившему начисляет 50 рублей на баланс бота и шлет уведомление.
+- Кнопка "Тест 24ч": Проверяет, брал ли юзер тест (hasUsedTrial). Если нет, запрашивает в RoyaltyKey тариф 'trial_24h', активирует подписку в БД и выдает ключ в красивом блоке кода MarkdownV2.
+- Кнопка "Купить Morena VPN": Выводит тарифы (1 мес — 300 руб, 3 мес — 800 руб). При выборе вычитает из цены доступный бонусный баланс юзера (списывая бонусы при успехе). Генерирует счет в CryptoBot.
+- ГЕНЕРАЦИЯ QR-КОДА: Код должен использовать библиотеку `qrcode` (метод toBuffer), превращать pay_url счета в изображение QR-кода и отправлять его пользователю методом replyWithPhoto (с помощью InputFile из памяти) вместе с кнопкой ссылки и кнопкой "Я оплатил".
+- Цикл проверки оплаты: Напиши функцию фоновой проверки статуса счета каждые 7 секунд. При статусе 'paid' автоматически вызывает метод выдачи ключа, пишет в БД подписку и шлет красивое сообщение юзеру.
+- Личный чертог (Профиль): Показывает ID, бонусный баланс, реферальную ссылку (https://t.me) и список всех ключей из БД (активен/истек) с кнопками быстрого продления "Продлить #X" (которые выставляют инвойс с payload 'renew:ID').
+- Ввод промокода: Любой текст, присланный боту (не команда), проверяется как промокод. Напиши логику транзакции: начисление денег на баланс, проверка maxUses и защита от повторного ввода. Админ (ID из process.env.ADMIN_TELEGRAM_ID) может создавать промокоды командой /addpromo CODE AMOUNT.
+- АВТО-УВЕДОМЛЕНИЯ (CRON): Используй node-cron. Каждый день в 12:00 скрипт ищет в БД подписки, которые истекают ровно через 3 дня и ровно через 1 день, и рассылает им предупреждения в ЛС с кнопкой быстрого продления.
+
+Напиши чистый, профессиональный и полностью готовый к сборке код на TypeScript. Раздели его на файлы согласно структуре проекта. Добавь подробные комментарии на русском языке к логике платежей и работы с базой данных.
