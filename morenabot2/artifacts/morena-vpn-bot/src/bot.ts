@@ -16,6 +16,7 @@ async function registerMenuCommands(): Promise<void> {
     { command: "menu", description: "📋 Главное меню" },
     { command: "profile", description: "👤 Личный кабинет" },
     { command: "help", description: "❓ Помощь" },
+    { command: "manual", description: "📖 Инструкция по настройке" },
   ];
 
   try {

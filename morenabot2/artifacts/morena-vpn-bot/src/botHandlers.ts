@@ -742,21 +742,47 @@ export function setupBotHandlers(bot: Bot): void {
     );
   });
 
-  bot.callbackQuery("howto", async (ctx) => {
-    await ctx.answerCallbackQuery();
+  async function sendManual(ctx: { reply: Function }): Promise<void> {
+    const keyboard = new InlineKeyboard()
+      .url("📥 Скачать для Windows", "https://github.com/hiddify/hiddify-app/releases/latest")
+      .row()
+      .url("📥 Скачать для Android", "https://play.google.com/store/apps/details?id=app.hiddify.com")
+      .row()
+      .url("📥 Скачать для iOS", "https://apps.apple.com/app/hiddify/id6596777532")
+      .row()
+      .url("📥 Скачать для macOS", "https://github.com/hiddify/hiddify-app/releases/latest")
+      .row()
+      .text("◀️ В меню", "menu");
+
     await ctx.reply(
-      `ℹ️ *Инструкция по настройке Morena VPN*\n\n` +
-      `1\\. Скачайте приложение *Hiddify* или *V2rayNG*\n` +
-      `2\\. Нажмите \\+ → Добавить из буфера обмена\n` +
-      `3\\. Вставьте ваш ключ\n` +
-      `4\\. Нажмите Подключиться\n\n` +
-      `📱 iOS: [Hiddify](https://apps.apple.com/app/hiddify/id6596777532)\n` +
-      `🤖 Android: [Hiddify](https://play.google.com/store/apps/details?id=app.hiddify.com)\n\n` +
+      `📖 *Инструкция по настройке Morena VPN*\n\n` +
+      `\\#\\#\\#\\# 1\\. Установка приложения\n\n` +
+      `Скачайте и установите *Hiddify* для вашей платформы:\n\n` +
+      `• *Windows / Linux* — [GitHub Releases](https://github.com/hiddify/hiddify-app/releases)\n` +
+      `• *macOS* — [GitHub Releases](https://github.com/hiddify/hiddify-app/releases)\n` +
+      `• *Android* — [Google Play](https://play.google.com/store/apps/details?id=app.hiddify.com)\n` +
+      `• *iOS / iPadOS* — [App Store](https://apps.apple.com/app/hiddify/id6596777532)\n\n` +
+      `Альтернативные клиенты: *V2rayNG* (Android) или *V2box* (iOS)\\.\n\n` +
+      `\\#\\#\\#\\# 2\\. Добавление подписки\n\n` +
+      `После покупки подписки в боте вы получите ключ доступа\\.\n\n` +
+      `• Откройте Hiddify\n` +
+      `• Нажмите \\"\\+\\" → \\"Добавить из буфера\\"\n` +
+      `• Скопируйте ключ из бота и вставьте\n\n` +
+      `\\#\\#\\#\\# 3\\. Подключение\n\n` +
+      `• Нажмите на добавленный профиль\n` +
+      `• Нажмите \\"Подключиться\\" / \\"Connect\\"\n` +
+      `• Готово — вы в Morena VPN\\!\n\n` +
+      `💡 *Совет:* если не работает — попробуйте переключить протокол или сервер в настройках приложения\\.\n\n` +
       `📄 [Политика конфиденциальности](https://telegra.ph/Politika-konfidencialnosti-06-21-31)\n` +
       `📋 [Пользовательское соглашение](https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19)\n\n` +
       `По вопросам: @morena_vpn_support`,
-      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("◀️ Назад", "menu") }
+      { parse_mode: "MarkdownV2", reply_markup: keyboard }
     );
+  }
+
+  bot.callbackQuery("howto", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await sendManual(ctx);
   });
 
   bot.callbackQuery("menu", async (ctx) => {
@@ -949,6 +975,10 @@ export function setupBotHandlers(bot: Bot): void {
     });
   });
 
+  bot.command("manual", async (ctx) => {
+    await sendManual(ctx);
+  });
+
   bot.command("help", async (ctx) => {
     await ctx.reply(
       `❓ *Помощь по боту Morena VPN*\n\n` +
@@ -956,6 +986,7 @@ export function setupBotHandlers(bot: Bot): void {
       `• /start — Запустить бота и получить меню\n` +
       `• /menu — Показать главное меню\n` +
       `• /profile — Личный кабинет\n` +
+      `• /manual — Инструкция по настройке\n` +
       `• /help — Эта справка\n\n` +
       `По вопросам: @morena_vpn_support`,
       { parse_mode: "MarkdownV2" }
