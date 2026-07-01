@@ -8,7 +8,6 @@
  *  - Покупка: тарифы → QR-инвойс → фоновая проверка → выдача ключа
  *  - Профиль: баланс, реферальная ссылка, список ключей
  *  - Промокоды: ввод + транзакция начисления бонуса
- *  - Админ: /addpromo
  *  - CRON: авто-уведомления об истечении
  */
 
@@ -22,8 +21,6 @@ import { TARIFFS, TRIAL_TARIFF_ID, TRIAL_DURATION_DAYS, REFERRAL_BONUS } from ".
 import { escapeMarkdown, formatVpnKey, formatDate, subStatus } from "./helpers.js";
 
 export function setupBotHandlers(bot: Bot): void {
-  const ADMIN_ID = BigInt(process.env.ADMIN_TELEGRAM_ID ?? "0");
-
   const POLL_INTERVAL_MS = 7000;
   const POLL_MAX_MS = 3600000;
   const FALLBACK_DURATION_DAYS = 30;
@@ -39,13 +36,6 @@ export function setupBotHandlers(bot: Bot): void {
   }
 
   const promoMode = new Set<number>();
-
-  interface AdminStep {
-    step: "awaiting_code" | "awaiting_amount" | "awaiting_max_uses";
-    code?: string;
-    amount?: number;
-  }
-  const adminWizard = new Map<number, AdminStep>();
 
   function mainMenuText(): string {
     return (
@@ -917,46 +907,6 @@ export function setupBotHandlers(bot: Bot): void {
     );
   });
 
-  bot.callbackQuery("admin", async (ctx) => {
-    await ctx.answerCallbackQuery();
-    const adminId = BigInt(ctx.from.id);
-    if (adminId !== ADMIN_ID) return;
-
-    const keyboard = new InlineKeyboard()
-      .text("➕ Создать промокод", "admin_addpromo").row()
-      .text("🔄 Перезагрузить", "admin_restart").row()
-      .text("◀️ Назад", "menu");
-
-    await ctx.reply("🛠 *Админ-панель*\n\nВыберите действие:", {
-      parse_mode: "MarkdownV2",
-      reply_markup: keyboard,
-    });
-  });
-
-  bot.callbackQuery("admin_addpromo", async (ctx) => {
-    await ctx.answerCallbackQuery();
-    const adminId = BigInt(ctx.from.id);
-    if (adminId !== ADMIN_ID) return;
-
-    adminWizard.set(ctx.from.id, { step: "awaiting_code" });
-    await ctx.reply(
-      `➕ *Создание промокода*\n\nВведите код промокода:`,
-      { parse_mode: "MarkdownV2" }
-    );
-  });
-
-  bot.callbackQuery("admin_restart", async (ctx) => {
-    await ctx.answerCallbackQuery("🔄 Перезагрузка...");
-    const adminId = BigInt(ctx.from.id);
-    if (adminId !== ADMIN_ID) return;
-
-    await ctx.reply("🔄 Перезагрузка бота...");
-    const { exec } = require("child_process");
-    exec("pm2 restart morena-bot", (err: Error | null) => {
-      if (err) console.error("[admin_restart] Ошибка:", err);
-    });
-  });
-
   async function sendManual(ctx: { reply: Function }): Promise<void> {
     const keyboard = new InlineKeyboard()
       .url("📥 Скачать для Windows", "https://github.com/hiddify/hiddify-app/releases/latest")
@@ -1072,54 +1022,6 @@ export function setupBotHandlers(bot: Bot): void {
 
     const userId = BigInt(ctx.from.id);
 
-    const wizard = adminWizard.get(ctx.from.id);
-    if (wizard) {
-      if (wizard.step === "awaiting_code") {
-        wizard.code = text.toUpperCase();
-        wizard.step = "awaiting_amount";
-        await ctx.reply(
-          `Код: *${escapeMarkdown(wizard.code)}*\n\nТеперь введите сумму бонуса в рублях:`,
-          { parse_mode: "MarkdownV2" }
-        );
-        return;
-      }
-      if (wizard.step === "awaiting_amount") {
-        const amount = parseInt(text);
-        if (isNaN(amount) || amount <= 0) {
-          await ctx.reply("❌ Укажите корректное число.");
-          return;
-        }
-        wizard.amount = amount;
-        wizard.step = "awaiting_max_uses";
-        await ctx.reply(
-          `Сумма: *${amount} ₽*\n\nВведите максимальное количество использований \\(по умолчанию 1000\\):`,
-          { parse_mode: "MarkdownV2" }
-        );
-        return;
-      }
-      if (wizard.step === "awaiting_max_uses") {
-        const maxUses = parseInt(text) || 1000;
-        try {
-          const promo = await prisma.promocode.upsert({
-            where: { id: wizard.code! },
-            create: { id: wizard.code!, bonusAmount: wizard.amount!, maxUses, usesCount: 0 },
-            update: { bonusAmount: wizard.amount!, maxUses },
-          });
-          await ctx.reply(
-            `✅ Промокод *${escapeMarkdown(promo.id)}* создан:\n` +
-            `💰 Бонус: *${promo.bonusAmount} ₽*\n` +
-            `🔢 Макс\\. использований: *${promo.maxUses}*`,
-            { parse_mode: "MarkdownV2" }
-          );
-        } catch (err) {
-          console.error("[admin_addpromo] Ошибка:", err);
-          await ctx.reply("❌ Ошибка создания промокода.");
-        }
-        adminWizard.delete(ctx.from.id);
-        return;
-      }
-    }
-
     if (!promoMode.has(ctx.from.id)) return;
 
     promoMode.delete(ctx.from.id);
@@ -1181,58 +1083,6 @@ export function setupBotHandlers(bot: Bot): void {
     }
   });
 
-  bot.command("addpromo", async (ctx) => {
-    const userId = BigInt(ctx.from?.id ?? 0);
-
-    if (userId !== ADMIN_ID) {
-      await ctx.reply("⛔ Эта команда доступна только администратору.");
-      return;
-    }
-
-    const parts = ctx.match?.trim().split(/\s+/) ?? [];
-
-    if (parts.length < 2) {
-      await ctx.reply(
-        "❌ Формат: `/addpromo КОД СУММА [МАКС_ИСПОЛЬЗОВАНИЙ]`\n\n" +
-          "Пример: `/addpromo MORENA50 50 100`",
-        { parse_mode: "MarkdownV2" }
-      );
-      return;
-    }
-
-    const [code, amountStr, maxUsesStr] = parts;
-    const bonusAmount = parseInt(amountStr);
-    const maxUses = parseInt(maxUsesStr ?? "1000");
-
-    if (isNaN(bonusAmount) || bonusAmount <= 0) {
-      await ctx.reply("❌ Укажите корректную сумму бонуса.");
-      return;
-    }
-
-    try {
-      const promo = await prisma.promocode.upsert({
-        where: { id: code.toUpperCase() },
-        create: {
-          id: code.toUpperCase(),
-          bonusAmount,
-          maxUses,
-          usesCount: 0,
-        },
-        update: { bonusAmount, maxUses },
-      });
-
-      await ctx.reply(
-        `✅ Промокод *${escapeMarkdown(promo.id)}* создан:\n` +
-          `💰 Бонус: *${promo.bonusAmount} ₽*\n` +
-          `🔢 Макс\\. использований: *${promo.maxUses}*`,
-        { parse_mode: "MarkdownV2" }
-      );
-    } catch (err) {
-      console.error("[addpromo] Ошибка:", err);
-      await ctx.reply("❌ Ошибка создания промокода.");
-    }
-  });
-
   bot.catch((err) => {
     console.error("[bot] Необработанная ошибка:", err.error);
   });
@@ -1262,22 +1112,4 @@ export function setupBotHandlers(bot: Bot): void {
     );
   });
 
-  bot.command("admin", async (ctx) => {
-    if (!ctx.from) return;
-    const adminId = BigInt(ctx.from.id);
-    if (adminId !== ADMIN_ID) {
-      await ctx.reply("⛔ Доступ запрещён.");
-      return;
-    }
-
-    const keyboard = new InlineKeyboard()
-      .text("➕ Создать промокод", "admin_addpromo").row()
-      .text("🔄 Перезагрузить", "admin_restart").row()
-      .text("◀️ Назад", "menu");
-
-    await ctx.reply("🛠 *Админ-панель*\n\nВыберите действие:", {
-      parse_mode: "MarkdownV2",
-      reply_markup: keyboard,
-    });
-  });
 }
