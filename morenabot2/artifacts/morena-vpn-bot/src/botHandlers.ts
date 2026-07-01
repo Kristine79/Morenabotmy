@@ -917,7 +917,7 @@ export function setupBotHandlers(bot: Bot): void {
       .row()
       .url("📥 Скачать для macOS", "https://github.com/hiddify/hiddify-app/releases/latest")
       .row()
-      .url("📖 Полная инструкция на сайте", "https://github.com/Kristine79/morenamanualsite")
+      .url("📖 Полная инструкция на сайте", "https://morenamanualsite.vercel.app/")
       .row()
       .text("◀️ В меню", "menu");
 
