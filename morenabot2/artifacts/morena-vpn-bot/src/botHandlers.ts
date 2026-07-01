@@ -32,6 +32,7 @@ export function setupBotHandlers(bot: Bot): void {
       .text("👤 Личный чертог", "profile").row()
       .text("🎟️ Активировать промокод", "promo").row()
       .text("ℹ️ Инструкция по настройке", "howto").row()
+      .text("🤖 Полезные боты", "useful_bots").row()
       .text("❓ Помощь", "help");
   }
 
@@ -944,6 +945,21 @@ export function setupBotHandlers(bot: Bot): void {
       `• Оберег сломался\n\n` +
       `Волхв: @morena_vpn_support`,
       { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("↩️ Вернуться в чащу", "menu") }
+    );
+  });
+
+  bot.callbackQuery("useful_bots", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.reply(
+      `🤖 *Полезные боты*\n\n` +
+      `Бот с подборкой полезных сервисов и инструментов для Telegram\\.\n\n` +
+      `Переходи и выбирай нужное 👇`,
+      {
+        parse_mode: "MarkdownV2",
+        reply_markup: new InlineKeyboard()
+          .url("🤖 Открыть бота", "https://t.me/usefulbots2026_bot").row()
+          .text("◀️ Назад", "menu"),
+      }
     );
   });
 
