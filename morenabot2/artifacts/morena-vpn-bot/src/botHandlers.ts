@@ -202,9 +202,9 @@ export function setupBotHandlers(bot: Bot): void {
       return;
     }
 
-    const usdtPrice = (tariff.priceRub / USDT_RUB_RATE).toFixed(2);
     const keyboard = new InlineKeyboard()
       .text("⚡ CryptoBot (USDT)", `pay_crypto:${tariffId}`).row()
+      .text("⭐ Telegram Stars", `pay_stars:${tariffId}`).row()
       .text("💳 Картой", `pay_card:${tariffId}`).row()
       .text("◀️ Назад", "buy");
 
@@ -290,11 +290,95 @@ export function setupBotHandlers(bot: Bot): void {
     }
   });
 
+  bot.callbackQuery(/^pay_stars:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const tariffId = ctx.match[1];
+    const userId = BigInt(ctx.from.id);
+
+    const tariff = TARIFFS.find((t) => t.id === tariffId);
+    if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const bonus = user?.balance ?? 0;
+    const discount = Math.min(bonus, tariff.priceRub);
+    const starsPrice = Math.max(0, tariff.priceStars - Math.round(discount / 2.38));
+
+    try {
+      const payload = `stars:${tariffId}:${userId}`;
+      await ctx.replyWithInvoice(tariff.label, `Morena VPN — ${tariff.label}`, payload, "XTR", [{ label: tariff.label, amount: starsPrice }]);
+    } catch (err) {
+      console.error("[pay_stars] Ошибка:", err);
+      await ctx.reply("❌ Не удалось создать счёт. Попробуйте позже.");
+    }
+  });
+
+  bot.on("pre_checkout_query", async (ctx) => {
+    await ctx.answerPreCheckoutQuery(true);
+  });
+
+  bot.on("message:successful_payment", async (ctx) => {
+    const msg = ctx.message;
+    if (!msg.successful_payment) return;
+    const userId = BigInt(ctx.from.id);
+    const payload = (msg.successful_payment as any).payload || (msg.successful_payment as any).invoice_payload;
+    const starsAmount = msg.successful_payment.total_amount;
+
+    const parts = payload.split(":");
+    const type = parts[0];
+
+    if (type === "stars") {
+      if (parts.length < 3) return;
+      const tariffId = parts[1];
+
+      const tariff = TARIFFS.find((t) => t.id === tariffId);
+      if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const bonus = user?.balance ?? 0;
+      const discount = Math.min(bonus, tariff.priceRub);
+
+      await prisma.payment.create({
+        data: {
+          id: `stars_${userId}_${Date.now()}`,
+          telegramUserId: userId,
+          tariffId,
+          amount: Math.round(starsAmount * 2.38),
+          status: "paid",
+        },
+      });
+
+      await grantVpnAccess(ctx, userId, tariffId, discount, Math.round(starsAmount * 2.38));
+    } else if (type === "renew_stars") {
+      if (parts.length < 3) return;
+      const subId = parts[1];
+      const tariffId = parts[2];
+
+      const tariff = TARIFFS.find((t) => t.id === tariffId);
+      if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const bonus = user?.balance ?? 0;
+      const discount = Math.min(bonus, tariff.priceRub);
+
+      await prisma.payment.create({
+        data: {
+          id: `stars_renew_${userId}_${Date.now()}`,
+          telegramUserId: userId,
+          tariffId,
+          amount: Math.round(starsAmount * 2.38),
+          status: "paid",
+        },
+      });
+
+      await processRenewal(ctx, userId, subId, tariffId, discount);
+    }
+  });
+
   bot.callbackQuery(/^pay_card:(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.reply(
-      `💳 *Оплата картой*\n\nОплата картой временно недоступна\\. Скоро добавим 🙌\n\nЕсли хотите оплатить сейчас — выберите CryptoBot\\.`,
-      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("⚡ CryptoBot (USDT)", `pay_crypto:${ctx.match[1]}`) }
+      `💳 *Оплата картой*\n\nОплата картой временно недоступна\\. Скоро добавим 🙌\n\nЕсли хотите оплатить сейчас — выберите CryptoBot или Telegram Stars\\.`,
+      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard() }
     );
   });
 
@@ -596,6 +680,7 @@ export function setupBotHandlers(bot: Bot): void {
 
     const keyboard = new InlineKeyboard()
       .text("⚡ CryptoBot (USDT)", `renew_crypto:${subId}:${tariffId}`).row()
+      .text("⭐ Telegram Stars", `renew_stars:${subId}:${tariffId}`).row()
       .text("💳 Картой", `renew_card:${subId}:${tariffId}`).row()
       .text("◀️ Назад", "profile");
 
@@ -677,13 +762,36 @@ export function setupBotHandlers(bot: Bot): void {
     }
   });
 
+  bot.callbackQuery(/^renew_stars:([^:]+):(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const subId = ctx.match[1];
+    const tariffId = ctx.match[2];
+    const userId = BigInt(ctx.from.id);
+
+    const tariff = TARIFFS.find((t) => t.id === tariffId);
+    if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const bonus = user?.balance ?? 0;
+    const discount = Math.min(bonus, tariff.priceRub);
+    const starsPrice = Math.max(0, tariff.priceStars - Math.round(discount / 2.38));
+
+    try {
+      const payload = `renew_stars:${subId}:${tariffId}`;
+      await ctx.replyWithInvoice(`🔄 Продление ${tariff.label}`, `Morena VPN — продление`, payload, "XTR", [{ label: tariff.label, amount: starsPrice }]);
+    } catch (err) {
+      console.error("[renew_stars] Ошибка:", err);
+      await ctx.reply("❌ Не удалось создать счёт. Попробуйте позже.");
+    }
+  });
+
   bot.callbackQuery(/^renew_card:([^:]+):(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     const subId = ctx.match[1];
     const tariffId = ctx.match[2];
     await ctx.reply(
-      `💳 *Оплата картой*\n\nОплата картой временно недоступна\\. Скоро добавим 🙌\n\nВыберите CryptoBot для оплаты сейчас\\.`,
-      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("⚡ CryptoBot (USDT)", `renew_crypto:${subId}:${tariffId}`) }
+      `💳 *Оплата картой*\n\nОплата картой временно недоступна\\. Скоро добавим 🙌\n\nВыберите CryptoBot или Telegram Stars для оплаты сейчас\\.`,
+      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard() }
     );
   });
 
@@ -781,6 +889,7 @@ export function setupBotHandlers(bot: Bot): void {
     await ctx.answerCallbackQuery();
     await ctx.reply(
       `💬 *Техподдержка Morena VPN*\n\n` +
+      `📬 Отвечаем быстро\\!\n\n` +
       `По всем вопросам:\n` +
       `• Технические проблемы\n` +
       `• Вопросы по оплате\n` +
