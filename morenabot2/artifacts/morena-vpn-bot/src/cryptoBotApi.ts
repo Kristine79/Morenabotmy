@@ -9,12 +9,16 @@ import axios from "axios";
 const MAINNET_URL = "https://pay.crypt.bot/api";
 const TESTNET_URL = "https://testnet-pay.crypt.bot/api";
 
+// Курс USDT к RUB (1 USDT = X RUB)
+export const USDT_RUB_RATE: number = parseFloat(process.env.USDT_RUB_RATE ?? "85");
+
 interface CryptoBotInvoice {
   invoice_id: number;
   pay_url: string;
   status: "active" | "paid" | "expired" | "cancelled";
   amount: string;
-  currency_type: string;
+  asset?: string;
+  currency_type?: string;
 }
 
 interface CryptoBotResponse<T> {
@@ -41,16 +45,13 @@ export class CryptoBotApi {
 
   private readonly axiosConfig: { headers: Record<string, string>; timeout: number; validateStatus: () => boolean };
 
-  async createRubInvoice(amountRub: number, payload: string): Promise<{ invoice_id: number; status: string; pay_url: string }> {
-    // Fiat-инвойс в рублях: поддерживаются карты и СБП.
-    // Нельзя передавать asset вместе с currency_type/currency.
+  async createCryptoInvoice(amountRub: number, payload: string): Promise<{ invoice_id: number; status: string; pay_url: string }> {
+    const amountUsdt = (amountRub / USDT_RUB_RATE).toFixed(2);
     const response = await axios.post<CryptoBotResponse<CryptoBotInvoice>>(
       `${this.baseUrl}/createInvoice`,
       {
-        currency_type: "fiat",
-        currency: "RUB",
-        amount: amountRub.toString(),
-        accepted_payment_methods: ["card", "sbp"],
+        asset: "USDT",
+        amount: amountUsdt,
         payload,
         description: "Оплата безопасного сетевого шлюза Morena VPN",
       },
@@ -69,6 +70,10 @@ export class CryptoBotApi {
       status: inv.status,
       pay_url: inv.pay_url,
     };
+  }
+
+  async createRubInvoice(amountRub: number, payload: string): Promise<{ invoice_id: number; status: string; pay_url: string }> {
+    return this.createCryptoInvoice(amountRub, payload);
   }
 
   async getInvoiceStatus(invoiceId: number): Promise<string> {

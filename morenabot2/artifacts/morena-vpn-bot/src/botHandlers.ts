@@ -17,7 +17,7 @@ import { Bot, InlineKeyboard, InputFile } from "grammy";
 import QRCode from "qrcode";
 import { prisma } from "./db.js";
 import { royaltyKey } from "./royaltyKeyApi.js";
-import { cryptoBot } from "./cryptoBotApi.js";
+import { cryptoBot, USDT_RUB_RATE } from "./cryptoBotApi.js";
 import { TARIFFS, TRIAL_TARIFF_ID, TRIAL_DURATION_DAYS, REFERRAL_BONUS } from "./tariffs.js";
 import { escapeMarkdown, formatVpnKey, formatDate, subStatus } from "./helpers.js";
 
@@ -172,10 +172,11 @@ export function setupBotHandlers(bot: Bot): void {
     const keyboard = new InlineKeyboard();
     for (const tariff of TARIFFS) {
       const finalPrice = Math.max(0, tariff.priceRub - bonus);
+      const usdtPrice = (finalPrice / USDT_RUB_RATE).toFixed(2);
       const priceText =
         bonus > 0
-          ? `${tariff.label} — ${finalPrice} ₽ (скидка ${Math.min(bonus, tariff.priceRub)} ₽)`
-          : `${tariff.label} — ${tariff.priceRub} ₽`;
+          ? `${tariff.label} — ${usdtPrice} USDT (скидка ${Math.min(bonus, tariff.priceRub)} ₽)`
+          : `${tariff.label}`;
       keyboard.text(priceText, `buy_tariff:${tariff.id}`).row();
     }
     keyboard.text("◀️ Назад", "menu");
@@ -229,7 +230,7 @@ export function setupBotHandlers(bot: Bot): void {
         return;
       }
 
-      const invoice = await cryptoBot.createRubInvoice(finalPrice, payload);
+      const invoice = await cryptoBot.createCryptoInvoice(finalPrice, payload);
       payUrl = invoice.pay_url;
       invoiceId = invoice.invoice_id;
 
@@ -250,9 +251,10 @@ export function setupBotHandlers(bot: Bot): void {
         color: { dark: "#1a1a2e", light: "#ffffff" },
       });
 
+      const usdtAmount = (finalPrice / USDT_RUB_RATE).toFixed(2);
       const priceText = discount > 0
-        ? `${tariff.priceRub} ₽ − ${discount} ₽ бонус = *${escapeMarkdown(finalPrice.toString())} ₽*`
-        : `*${escapeMarkdown(finalPrice.toString())} ₽*`;
+        ? `${tariff.priceRub} ₽ − ${discount} ₽ бонус = *${usdtAmount} USDT*`
+        : `*${usdtAmount} USDT* (~${escapeMarkdown(finalPrice.toString())} ₽)`;
 
       const keyboard = new InlineKeyboard()
         .url("💳 Оплатить онлайн", payUrl).row()
@@ -594,8 +596,9 @@ export function setupBotHandlers(bot: Bot): void {
         return;
       }
 
+      const usdtAmount = (finalPrice / USDT_RUB_RATE).toFixed(2);
       const payload = `renew:${subId}:${tariffId}`;
-      const invoice = await cryptoBot.createRubInvoice(finalPrice, payload);
+      const invoice = await cryptoBot.createCryptoInvoice(finalPrice, payload);
 
       await prisma.payment.create({
         data: {
@@ -621,7 +624,7 @@ export function setupBotHandlers(bot: Bot): void {
         caption:
           `🧾 *Продление подписки*\n\n` +
           `📦 Тариф: *${escapeMarkdown(tariff.label)}*\n` +
-          `💰 Сумма: *${escapeMarkdown(finalPrice.toString())} ₽*`,
+          `💰 Сумма: *${usdtAmount} USDT* (~${escapeMarkdown(finalPrice.toString())} ₽)`,
         parse_mode: "MarkdownV2",
         reply_markup: keyboard,
       });
