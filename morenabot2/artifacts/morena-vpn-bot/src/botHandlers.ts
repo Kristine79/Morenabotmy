@@ -32,8 +32,7 @@ export function setupBotHandlers(bot: Bot): void {
       .text("👤 Личный чертог", "profile").row()
       .text("🎟️ Активировать промокод", "promo").row()
       .text("ℹ️ Инструкция по настройке", "howto").row()
-      .text("❓ Помощь", "help").row()
-      .text("💬 Техподдержка", "support");
+      .text("❓ Помощь", "help");
   }
 
   const promoMode = new Set<number>();
