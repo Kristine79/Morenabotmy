@@ -58,7 +58,9 @@ export class CryptoBotApi {
     );
 
     if (!response.data.ok) {
-      throw new Error(`CryptoBot API error: ${JSON.stringify(response.data.error)}`);
+      const errDetail = JSON.stringify(response.data.error);
+      console.error(`[CryptoBot] createInvoice error: ${errDetail}, full response:`, JSON.stringify(response.data));
+      throw new Error(`CryptoBot API error: ${errDetail}`);
     }
 
     const inv = response.data.result;
