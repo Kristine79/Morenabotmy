@@ -36,10 +36,10 @@ export class CryptoBotApi {
       "Crypto-Pay-API-Token": token,
       "Content-Type": "application/json",
     };
-    this.axiosConfig = { headers: this.headers, timeout: 10000 };
+    this.axiosConfig = { headers: this.headers, timeout: 10000, validateStatus: () => true };
   }
 
-  private readonly axiosConfig: { headers: Record<string, string>; timeout: number };
+  private readonly axiosConfig: { headers: Record<string, string>; timeout: number; validateStatus: () => boolean };
 
   async createRubInvoice(amountRub: number, payload: string): Promise<{ invoice_id: number; status: string; pay_url: string }> {
     // Fiat-инвойс в рублях: поддерживаются карты и СБП.
