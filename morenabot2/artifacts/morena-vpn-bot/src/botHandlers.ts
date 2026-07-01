@@ -29,6 +29,7 @@ export function setupBotHandlers(bot: Bot): void {
     return new InlineKeyboard()
       .text("🔮 Активировать тест (24ч)", "trial").row()
       .text("⚡ Купить Morena VPN", "buy").row()
+      .text("🎁 Подарить подписку", "gift").row()
       .text("👤 Личный чертог", "profile").row()
       .text("🎟️ Активировать промокод", "promo").row()
       .text("ℹ️ Инструкция по настройке", "howto").row()
@@ -37,6 +38,7 @@ export function setupBotHandlers(bot: Bot): void {
   }
 
   const promoMode = new Set<number>();
+  const giftState = new Map<number, { tariffId: string; step: "awaiting_recipient" }>();
 
   function mainMenuText(): string {
     return (
@@ -214,6 +216,131 @@ export function setupBotHandlers(bot: Bot): void {
     );
   });
 
+  bot.callbackQuery("gift", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const keyboard = new InlineKeyboard();
+    for (const tariff of TARIFFS) {
+      const usdtPrice = (tariff.priceRub / USDT_RUB_RATE).toFixed(2);
+      keyboard.text(`${tariff.label} — ${usdtPrice} USDT`, `gift_tariff:${tariff.id}`).row();
+    }
+    keyboard.text("◀️ Назад", "menu");
+
+    await ctx.reply("🎁 *Подарить подписку*\n\nВыберите тариф для подарка:", {
+      parse_mode: "MarkdownV2",
+      reply_markup: keyboard,
+    });
+  });
+
+  bot.callbackQuery(/^gift_tariff:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const tariffId = ctx.match[1];
+    giftState.set(ctx.from.id, { tariffId, step: "awaiting_recipient" });
+    await ctx.reply(
+      `🎁 Отправьте username пользователя, которому хотите подарить подписку\\.\n\nПример: \`@username\``,
+      { parse_mode: "MarkdownV2" }
+    );
+  });
+
+  bot.callbackQuery(/^gift_pay_crypto:([^:]+):(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const tariffId = ctx.match[1];
+    const recipient = ctx.match[2];
+    const senderId = BigInt(ctx.from.id);
+
+    const tariff = TARIFFS.find((t) => t.id === tariffId);
+    if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
+    const finalPrice = tariff.priceRub;
+    await ctx.reply("⏳ Создаём счёт...");
+
+    try {
+      const payload = `gift:${recipient}:${tariffId}:${senderId}`;
+      const invoice = await cryptoBot.createCryptoInvoice(finalPrice, payload);
+      const usdtAmount = (finalPrice / USDT_RUB_RATE).toFixed(2);
+
+      const qrBuffer = await QRCode.toBuffer(invoice.pay_url, {
+        type: "png", margin: 2, width: 512,
+        color: { dark: "#1a1a2e", light: "#ffffff" },
+      });
+
+      await ctx.replyWithPhoto(new InputFile(qrBuffer, "qr.png"), {
+        caption:
+          `🎁 *Подарок для @${recipient}*\n\n` +
+          `📦 *${escapeMarkdown(tariff.label)}*\n` +
+          `💰 Сумма: *${escapeMarkdown(usdtAmount)} USDT*\n\n` +
+          `Оплатите USDT через CryptoBot\\.`,
+        parse_mode: "MarkdownV2",
+        reply_markup: new InlineKeyboard()
+          .url("💳 Оплатить", invoice.pay_url).row()
+          .text("✅ Я оплатил", `gift_check:${invoice.invoice_id}:${recipient}:${tariffId}`),
+      });
+    } catch (err) {
+      console.error("[gift_pay_crypto] Ошибка:", err);
+      await ctx.reply("❌ Не удалось создать счёт.");
+    }
+  });
+
+  bot.callbackQuery(/^gift_check:(\d+):([^:]+):(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery("🔍 Проверяем платёж...");
+    const invoiceId = parseInt(ctx.match[1]);
+    const recipient = ctx.match[2];
+    const tariffId = ctx.match[3];
+
+    try {
+      const status = await cryptoBot.getInvoiceStatus(invoiceId);
+      if (status !== "paid") {
+        await ctx.reply("⏳ Платёж ещё не получен. Попробуйте позже.");
+        return;
+      }
+
+      let recipientId: bigint;
+      try {
+        const chat = await bot.api.getChat(`@${recipient}`);
+        recipientId = BigInt(chat.id);
+      } catch {
+        await ctx.reply("❌ Пользователь не найден. Убедитесь, что username правильный.");
+        return;
+      }
+
+      await prisma.user.upsert({
+        where: { id: recipientId },
+        create: { id: recipientId, username: recipient },
+        update: {},
+      });
+      await ctx.reply("🎁 Оплата прошла! Создаём ключ для получателя...");
+      await grantVpnAccessById(ctx, recipientId, tariffId, 0, 0);
+      await ctx.reply(`✅ Подарок для @${escapeMarkdown(recipient)} активирован\\!`);
+    } catch (err) {
+      console.error("[gift_check] Ошибка:", err);
+      await ctx.reply("❌ Ошибка проверки платежа.");
+    }
+  });
+
+  bot.callbackQuery(/^gift_pay_stars:([^:]+):(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const tariffId = ctx.match[1];
+    const recipient = ctx.match[2];
+    const tariff = TARIFFS.find((t) => t.id === tariffId);
+    if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
+    const payload = `gift_stars:${recipient}:${tariffId}`;
+    await ctx.replyWithInvoice(
+      `🎁 Подарок для @${recipient}`,
+      `Morena VPN — ${tariff.label}`,
+      payload,
+      "XTR",
+      [{ label: tariff.label, amount: tariff.priceStars }]
+    );
+  });
+
+  bot.callbackQuery(/^gift_pay_card:([^:]+):(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.reply(
+      `💳 *Оплата картой*\n\nОплата картой временно недоступна\\. Скоро добавим 🙌\n\nЕсли хотите оплатить сейчас — выберите CryptoBot или Telegram Stars\\.`,
+      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("◀️ Назад", "gift") }
+    );
+  });
+
   bot.callbackQuery(/^pay_crypto:(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     const tariffId = ctx.match[1];
@@ -348,6 +475,31 @@ export function setupBotHandlers(bot: Bot): void {
       });
 
       await grantVpnAccess(ctx, userId, tariffId, discount, Math.round(starsAmount * 2.38));
+    } else if (type === "gift_stars") {
+      if (parts.length < 3) return;
+      const recipient = parts[1];
+      const tariffId = parts[2];
+
+      const tariff = TARIFFS.find((t) => t.id === tariffId);
+      if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
+      let recipientId: bigint;
+      try {
+        const chat = await bot.api.getChat(`@${recipient}`);
+        recipientId = BigInt(chat.id);
+      } catch {
+        await ctx.reply("❌ Пользователь не найден.");
+        return;
+      }
+
+      await prisma.user.upsert({
+        where: { id: recipientId },
+        create: { id: recipientId, username: recipient },
+        update: {},
+      });
+
+      await grantVpnAccess(ctx, recipientId, tariffId, 0, Math.round(starsAmount * 2.38));
+      await ctx.reply(`✅ Подарок для @${escapeMarkdown(recipient)} активирован\\!`);
     } else if (type === "renew_stars") {
       if (parts.length < 3) return;
       const subId = parts[1];
@@ -1086,6 +1238,31 @@ export function setupBotHandlers(bot: Bot): void {
     }
 
     const userId = BigInt(ctx.from.id);
+
+    const gState = giftState.get(ctx.from.id);
+    if (gState && gState.step === "awaiting_recipient") {
+      const raw = ctx.message.text.trim();
+      const recipient = raw.startsWith("@") ? raw.slice(1) : raw;
+      if (!recipient || recipient.length < 2) {
+        await ctx.reply("❌ Укажите корректный username.");
+        return;
+      }
+      giftState.delete(ctx.from.id);
+      const tariff = TARIFFS.find((t) => t.id === gState.tariffId);
+      if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
+      const keyboard = new InlineKeyboard()
+        .text("⚡ CryptoBot (USDT)", `gift_pay_crypto:${gState.tariffId}:${recipient}`).row()
+        .text("⭐ Telegram Stars", `gift_pay_stars:${gState.tariffId}:${recipient}`).row()
+        .text("💳 Картой", `gift_pay_card:${gState.tariffId}:${recipient}`).row()
+        .text("◀️ Назад", "gift");
+
+      await ctx.reply(
+        `🎁 Подарок для *@${escapeMarkdown(recipient)}*\n📦 *${escapeMarkdown(tariff.label)}*\n\nВыберите способ оплаты:`,
+        { parse_mode: "MarkdownV2", reply_markup: keyboard }
+      );
+      return;
+    }
 
     if (!promoMode.has(ctx.from.id)) return;
 
