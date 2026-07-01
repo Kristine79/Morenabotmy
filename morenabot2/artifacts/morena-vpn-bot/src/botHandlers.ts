@@ -902,7 +902,7 @@ export function setupBotHandlers(bot: Bot): void {
   bot.callbackQuery("promo", async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.reply(
-      `🎟️ *Введите промокод*\n\nОтправьте промокод следующим сообщением\.`,
+      `🎟️ *Введите промокод*\n\nОтправьте промокод следующим сообщением\\.`,
       { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("◀️ Назад", "menu") }
     );
   });
