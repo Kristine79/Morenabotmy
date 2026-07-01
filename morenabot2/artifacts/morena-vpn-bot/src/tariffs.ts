@@ -11,16 +11,34 @@ export interface Tariff {
 
 export const TARIFFS: Tariff[] = [
   {
-    id: "1month",
-    label: "1 месяц",
-    priceRub: 300,
+    id: "7days",
+    label: "⏱ 7 дней — 119 ₽",
+    priceRub: 119,
+    durationDays: 7,
+  },
+  {
+    id: "30days",
+    label: "📱 30 дней — 249 ₽",
+    priceRub: 249,
     durationDays: 30,
   },
   {
-    id: "3month",
-    label: "3 месяца",
-    priceRub: 800,
+    id: "90days",
+    label: "🔥 90 дней — 590 ₽",
+    priceRub: 590,
     durationDays: 90,
+  },
+  {
+    id: "180days",
+    label: "💼 180 дней — 1190 ₽",
+    priceRub: 1190,
+    durationDays: 180,
+  },
+  {
+    id: "365days",
+    label: "👑 365 дней — 1990 ₽",
+    priceRub: 1990,
+    durationDays: 365,
   },
 ];
 
