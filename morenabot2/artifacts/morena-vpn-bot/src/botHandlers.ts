@@ -752,6 +752,8 @@ export function setupBotHandlers(bot: Bot): void {
       .row()
       .url("📥 Скачать для macOS", "https://github.com/hiddify/hiddify-app/releases/latest")
       .row()
+      .url("📖 Полная инструкция на сайте", "https://github.com/Kristine79/morenamanualsite")
+      .row()
       .text("◀️ В меню", "menu");
 
     await ctx.reply(
