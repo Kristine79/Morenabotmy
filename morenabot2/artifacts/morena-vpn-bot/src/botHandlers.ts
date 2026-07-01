@@ -28,15 +28,30 @@ export function setupBotHandlers(bot: Bot): void {
   const POLL_MAX_MS = 3600000;
   const FALLBACK_DURATION_DAYS = 30;
 
-  function mainMenuKeyboard(): InlineKeyboard {
-    return new InlineKeyboard()
+  function mainMenuKeyboard(userId?: bigint): InlineKeyboard {
+    const kb = new InlineKeyboard()
       .text("🔮 Активировать тест (24ч)", "trial").row()
       .text("⚡ Купить Morena VPN", "buy").row()
       .text("👤 Личный чертог", "profile").row()
       .text("🎟️ Активировать промокод", "promo").row()
       .text("ℹ️ Инструкция по настройке", "howto").row()
       .text("💬 Техподдержка", "support");
+
+    if (userId !== undefined && userId === ADMIN_ID) {
+      kb.row().text("🛠 Админ-панель", "admin");
+    }
+
+    return kb;
   }
+
+  const promoMode = new Set<number>();
+
+  interface AdminStep {
+    step: "awaiting_code" | "awaiting_amount" | "awaiting_max_uses";
+    code?: string;
+    amount?: number;
+  }
+  const adminWizard = new Map<number, AdminStep>();
 
   function mainMenuText(): string {
     return (
@@ -105,7 +120,7 @@ export function setupBotHandlers(bot: Bot): void {
 
     await ctx.reply(mainMenuText(), {
       parse_mode: "MarkdownV2",
-      reply_markup: mainMenuKeyboard(),
+      reply_markup: mainMenuKeyboard(BigInt(tgUser.id)),
     });
   });
 
@@ -901,10 +916,51 @@ export function setupBotHandlers(bot: Bot): void {
 
   bot.callbackQuery("promo", async (ctx) => {
     await ctx.answerCallbackQuery();
+    promoMode.add(ctx.from.id);
     await ctx.reply(
       `🎟️ *Введите промокод*\n\nОтправьте промокод следующим сообщением\\.`,
       { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("◀️ Назад", "menu") }
     );
+  });
+
+  bot.callbackQuery("admin", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const adminId = BigInt(ctx.from.id);
+    if (adminId !== ADMIN_ID) return;
+
+    const keyboard = new InlineKeyboard()
+      .text("➕ Создать промокод", "admin_addpromo").row()
+      .text("🔄 Перезагрузить", "admin_restart").row()
+      .text("◀️ Назад", "menu");
+
+    await ctx.reply("🛠 *Админ-панель*\n\nВыберите действие:", {
+      parse_mode: "MarkdownV2",
+      reply_markup: keyboard,
+    });
+  });
+
+  bot.callbackQuery("admin_addpromo", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const adminId = BigInt(ctx.from.id);
+    if (adminId !== ADMIN_ID) return;
+
+    adminWizard.set(ctx.from.id, { step: "awaiting_code" });
+    await ctx.reply(
+      `➕ *Создание промокода*\n\nВведите код промокода:`,
+      { parse_mode: "MarkdownV2" }
+    );
+  });
+
+  bot.callbackQuery("admin_restart", async (ctx) => {
+    await ctx.answerCallbackQuery("🔄 Перезагрузка...");
+    const adminId = BigInt(ctx.from.id);
+    if (adminId !== ADMIN_ID) return;
+
+    await ctx.reply("🔄 Перезагрузка бота...");
+    const { exec } = require("child_process");
+    exec("pm2 restart morena-bot", (err: Error | null) => {
+      if (err) console.error("[admin_restart] Ошибка:", err);
+    });
   });
 
   async function sendManual(ctx: { reply: Function }): Promise<void> {
@@ -956,7 +1012,7 @@ export function setupBotHandlers(bot: Bot): void {
     await ctx.answerCallbackQuery();
     await ctx.reply(mainMenuText(), {
       parse_mode: "MarkdownV2",
-      reply_markup: mainMenuKeyboard(),
+      reply_markup: mainMenuKeyboard(BigInt(ctx.from.id)),
     });
   });
 
@@ -968,7 +1024,7 @@ export function setupBotHandlers(bot: Bot): void {
     if (text === "menu" || text === "главное меню") {
       await ctx.reply(mainMenuText(), {
         parse_mode: "MarkdownV2",
-        reply_markup: mainMenuKeyboard(),
+        reply_markup: mainMenuKeyboard(BigInt(ctx.from.id)),
       });
       return;
     }
@@ -1021,6 +1077,58 @@ export function setupBotHandlers(bot: Bot): void {
     }
 
     const userId = BigInt(ctx.from.id);
+
+    const wizard = adminWizard.get(ctx.from.id);
+    if (wizard) {
+      if (wizard.step === "awaiting_code") {
+        wizard.code = text.toUpperCase();
+        wizard.step = "awaiting_amount";
+        await ctx.reply(
+          `Код: *${escapeMarkdown(wizard.code)}*\n\nТеперь введите сумму бонуса в рублях:`,
+          { parse_mode: "MarkdownV2" }
+        );
+        return;
+      }
+      if (wizard.step === "awaiting_amount") {
+        const amount = parseInt(text);
+        if (isNaN(amount) || amount <= 0) {
+          await ctx.reply("❌ Укажите корректное число.");
+          return;
+        }
+        wizard.amount = amount;
+        wizard.step = "awaiting_max_uses";
+        await ctx.reply(
+          `Сумма: *${amount} ₽*\n\nВведите максимальное количество использований \\(по умолчанию 1000\\):`,
+          { parse_mode: "MarkdownV2" }
+        );
+        return;
+      }
+      if (wizard.step === "awaiting_max_uses") {
+        const maxUses = parseInt(text) || 1000;
+        try {
+          const promo = await prisma.promocode.upsert({
+            where: { id: wizard.code! },
+            create: { id: wizard.code!, bonusAmount: wizard.amount!, maxUses, usesCount: 0 },
+            update: { bonusAmount: wizard.amount!, maxUses },
+          });
+          await ctx.reply(
+            `✅ Промокод *${escapeMarkdown(promo.id)}* создан:\n` +
+            `💰 Бонус: *${promo.bonusAmount} ₽*\n` +
+            `🔢 Макс\\. использований: *${promo.maxUses}*`,
+            { parse_mode: "MarkdownV2" }
+          );
+        } catch (err) {
+          console.error("[admin_addpromo] Ошибка:", err);
+          await ctx.reply("❌ Ошибка создания промокода.");
+        }
+        adminWizard.delete(ctx.from.id);
+        return;
+      }
+    }
+
+    if (!promoMode.has(ctx.from.id)) return;
+
+    promoMode.delete(ctx.from.id);
 
     await prisma.user.upsert({
       where: { id: userId },
@@ -1136,9 +1244,10 @@ export function setupBotHandlers(bot: Bot): void {
   });
 
   bot.command("menu", async (ctx) => {
+    if (!ctx.from) return;
     await ctx.reply(mainMenuText(), {
       parse_mode: "MarkdownV2",
-      reply_markup: mainMenuKeyboard(),
+      reply_markup: mainMenuKeyboard(BigInt(ctx.from.id)),
     });
   });
 
