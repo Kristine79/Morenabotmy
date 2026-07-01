@@ -32,6 +32,7 @@ export function setupBotHandlers(bot: Bot): void {
       .text("👤 Личный чертог", "profile").row()
       .text("🎟️ Активировать промокод", "promo").row()
       .text("ℹ️ Инструкция по настройке", "howto").row()
+      .text("❓ Помощь", "help").row()
       .text("💬 Техподдержка", "support");
   }
 
@@ -883,6 +884,55 @@ export function setupBotHandlers(bot: Bot): void {
       console.error("[processRenewal] Ошибка:", err);
     }
   }
+
+  bot.callbackQuery("help", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const text =
+      `*Наши преимущества*\n\n` +
+      `⚡️ *Максимальная скорость*\n` +
+      `📶 Наши сервера обеспечивают высокую пропускную способность и низкий пинг, что позволяет пользоваться интернетом без задержек\\.\n\n` +
+      `🔒 *Надёжное шифрование*\n` +
+      `⚙️ Современные протоколы безопасности защищают ваши данные и обеспечивают приватность в сети\\.\n\n` +
+      `📱 *Максимальная выгода*\n` +
+      `🎁 Мы не берем дополнительную плату за подключение новых устройств, на один ключ можно подключить максимум 3 устройства\\.\n\n` +
+      `🔑 *Ваш ключ — ваша безопасность\\!*\n` +
+      `⚠️ Не передавайте его другим лицам, чтобы сохранить защиту и стабильность соединения\\.\n\n` +
+      `*Часто задаваемые вопросы ⬇️*`;
+
+    const keyboard = new InlineKeyboard()
+      .text("🌐 ВПН не работает", "faq_vpn").row()
+      .text("💳 Не проходит оплата", "faq_payment").row()
+      .text("💬 Техподдержка", "support").row()
+      .text("◀️ Назад", "menu");
+
+    await ctx.reply(text, {
+      parse_mode: "MarkdownV2",
+      reply_markup: keyboard,
+    });
+  });
+
+  bot.callbackQuery("faq_vpn", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.reply(
+      `🌐 *ВПН не работает*\n\n` +
+      `1\\. Проверьте подключение к интернету\\.\n` +
+      `2\\. Убедитесь, что ключ не истёк \\- проверьте в "Личный чертог"\\.\n` +
+      `3\\. Попробуйте переустановить конфигурацию в приложении V2rayNG или V2box\\.\n` +
+      `4\\. Если ничего не помогло \\- напишите в техподдержку\\.`,
+      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("◀️ Назад", "help") }
+    );
+  });
+
+  bot.callbackQuery("faq_payment", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.reply(
+      `💳 *Не проходит оплата*\n\n` +
+      `1\\. CryptoBot: убедитесь, что у вас достаточно USDT в кошельке CryptoBot\\.\n` +
+      `2\\. Telegram Stars: спишутся автоматически, если на балансе есть звёзды\\.\n` +
+      `3\\. Если оплата прошла, но ключ не пришёл \\- нажмите "Я оплатил" под счётом или напишите в поддержку\\.`,
+      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("◀️ Назад", "help") }
+    );
+  });
 
   bot.callbackQuery("support", async (ctx) => {
     await ctx.answerCallbackQuery();
