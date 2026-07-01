@@ -112,13 +112,13 @@ export function setupBotHandlers(bot: Bot): void {
     await ctx.answerCallbackQuery();
     const userId = BigInt(ctx.from.id);
 
-    // Атомарная проверка и установка флага — защита от race condition
     const alreadyUsed = await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({ where: { id: userId } });
       if (user?.hasUsedTrial) return true;
-      await tx.user.update({
+      await tx.user.upsert({
         where: { id: userId },
-        data: { hasUsedTrial: true },
+        create: { id: userId, username: ctx.from?.username ?? null, hasUsedTrial: true },
+        update: { hasUsedTrial: true },
       });
       return false;
     });
