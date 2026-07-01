@@ -17,6 +17,7 @@ async function registerMenuCommands(): Promise<void> {
     { command: "profile", description: "👤 Личный кабинет" },
     { command: "help", description: "❓ Помощь" },
     { command: "manual", description: "📖 Инструкция по настройке" },
+    { command: "admin", description: "🛠 Админ-панель" },
   ];
 
   try {

@@ -28,20 +28,14 @@ export function setupBotHandlers(bot: Bot): void {
   const POLL_MAX_MS = 3600000;
   const FALLBACK_DURATION_DAYS = 30;
 
-  function mainMenuKeyboard(userId?: bigint): InlineKeyboard {
-    const kb = new InlineKeyboard()
+  function mainMenuKeyboard(): InlineKeyboard {
+    return new InlineKeyboard()
       .text("🔮 Активировать тест (24ч)", "trial").row()
       .text("⚡ Купить Morena VPN", "buy").row()
       .text("👤 Личный чертог", "profile").row()
       .text("🎟️ Активировать промокод", "promo").row()
       .text("ℹ️ Инструкция по настройке", "howto").row()
       .text("💬 Техподдержка", "support");
-
-    if (userId !== undefined && userId === ADMIN_ID) {
-      kb.row().text("🛠 Админ-панель", "admin");
-    }
-
-    return kb;
   }
 
   const promoMode = new Set<number>();
@@ -120,7 +114,7 @@ export function setupBotHandlers(bot: Bot): void {
 
     await ctx.reply(mainMenuText(), {
       parse_mode: "MarkdownV2",
-      reply_markup: mainMenuKeyboard(BigInt(tgUser.id)),
+      reply_markup: mainMenuKeyboard(),
     });
   });
 
@@ -1012,7 +1006,7 @@ export function setupBotHandlers(bot: Bot): void {
     await ctx.answerCallbackQuery();
     await ctx.reply(mainMenuText(), {
       parse_mode: "MarkdownV2",
-      reply_markup: mainMenuKeyboard(BigInt(ctx.from.id)),
+      reply_markup: mainMenuKeyboard(),
     });
   });
 
@@ -1024,7 +1018,7 @@ export function setupBotHandlers(bot: Bot): void {
     if (text === "menu" || text === "главное меню") {
       await ctx.reply(mainMenuText(), {
         parse_mode: "MarkdownV2",
-        reply_markup: mainMenuKeyboard(BigInt(ctx.from.id)),
+        reply_markup: mainMenuKeyboard(),
       });
       return;
     }
@@ -1244,10 +1238,9 @@ export function setupBotHandlers(bot: Bot): void {
   });
 
   bot.command("menu", async (ctx) => {
-    if (!ctx.from) return;
     await ctx.reply(mainMenuText(), {
       parse_mode: "MarkdownV2",
-      reply_markup: mainMenuKeyboard(BigInt(ctx.from.id)),
+      reply_markup: mainMenuKeyboard(),
     });
   });
 
@@ -1267,5 +1260,24 @@ export function setupBotHandlers(bot: Bot): void {
       `По вопросам: @morena_vpn_support`,
       { parse_mode: "MarkdownV2" }
     );
+  });
+
+  bot.command("admin", async (ctx) => {
+    if (!ctx.from) return;
+    const adminId = BigInt(ctx.from.id);
+    if (adminId !== ADMIN_ID) {
+      await ctx.reply("⛔ Доступ запрещён.");
+      return;
+    }
+
+    const keyboard = new InlineKeyboard()
+      .text("➕ Создать промокод", "admin_addpromo").row()
+      .text("🔄 Перезагрузить", "admin_restart").row()
+      .text("◀️ Назад", "menu");
+
+    await ctx.reply("🛠 *Админ-панель*\n\nВыберите действие:", {
+      parse_mode: "MarkdownV2",
+      reply_markup: keyboard,
+    });
   });
 }
