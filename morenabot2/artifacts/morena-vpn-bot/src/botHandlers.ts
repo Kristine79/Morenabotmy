@@ -194,7 +194,6 @@ export function setupBotHandlers(bot: Bot): void {
 
   bot.callbackQuery(/^buy_tariff:(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    const userId = BigInt(ctx.from.id);
     const tariffId = ctx.match[1];
 
     const tariff = TARIFFS.find((t) => t.id === tariffId);
@@ -203,19 +202,34 @@ export function setupBotHandlers(bot: Bot): void {
       return;
     }
 
+    const usdtPrice = (tariff.priceRub / USDT_RUB_RATE).toFixed(2);
+    const keyboard = new InlineKeyboard()
+      .text("⚡ CryptoBot (USDT)", `pay_crypto:${tariffId}`).row()
+      .text("💳 Картой", `pay_card:${tariffId}`).row()
+      .text("◀️ Назад", "buy");
+
+    await ctx.reply(
+      `📦 *${escapeMarkdown(tariff.label)}*\n\nВыберите способ оплаты:`,
+      { parse_mode: "MarkdownV2", reply_markup: keyboard }
+    );
+  });
+
+  bot.callbackQuery(/^pay_crypto:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const tariffId = ctx.match[1];
+    const userId = BigInt(ctx.from.id);
+
+    const tariff = TARIFFS.find((t) => t.id === tariffId);
+    if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
     const user = await prisma.user.findUnique({ where: { id: userId } });
     const bonus = user?.balance ?? 0;
-
     const discount = Math.min(bonus, tariff.priceRub);
     const finalPrice = tariff.priceRub - discount;
 
-    await ctx.reply(`⏳ Создаём счёт на оплату...`);
+    await ctx.reply("⏳ Создаём счёт на оплату...");
 
     try {
-      let payUrl: string;
-      let invoiceId: number;
-      const payload = `buy:${tariffId}:${userId}`;
-
       if (finalPrice === 0) {
         await prisma.payment.create({
           data: {
@@ -230,13 +244,12 @@ export function setupBotHandlers(bot: Bot): void {
         return;
       }
 
+      const payload = `buy:${tariffId}:${userId}`;
       const invoice = await cryptoBot.createCryptoInvoice(finalPrice, payload);
-      payUrl = invoice.pay_url;
-      invoiceId = invoice.invoice_id;
 
       await prisma.payment.create({
         data: {
-          id: invoiceId.toString(),
+          id: invoice.invoice_id.toString(),
           telegramUserId: userId,
           tariffId,
           amount: finalPrice,
@@ -244,7 +257,7 @@ export function setupBotHandlers(bot: Bot): void {
         },
       });
 
-      const qrBuffer = await QRCode.toBuffer(payUrl, {
+      const qrBuffer = await QRCode.toBuffer(invoice.pay_url, {
         type: "png",
         margin: 2,
         width: 512,
@@ -257,24 +270,32 @@ export function setupBotHandlers(bot: Bot): void {
         : `*${usdtAmount} USDT* (~${escapeMarkdown(finalPrice.toString())} ₽)`;
 
       const keyboard = new InlineKeyboard()
-        .url("💳 Оплатить онлайн", payUrl).row()
-        .text("✅ Я оплатил", `check_payment:${invoiceId}`);
+        .url("💳 Оплатить", invoice.pay_url).row()
+        .text("✅ Я оплатил", `check_payment:${invoice.invoice_id}`);
 
       await ctx.replyWithPhoto(new InputFile(qrBuffer, "qr.png"), {
         caption:
-          `🧾 *Счёт на оплату*\n\n` +
+          `🧾 *Счёт на оплату через CryptoBot*\n\n` +
           `📦 Тариф: *${escapeMarkdown(tariff.label)}*\n` +
           `💰 Сумма: ${priceText}\n\n` +
-          `Отсканируйте QR\\-код или нажмите кнопку ниже\\.`,
+          `Оплатите USDT через CryptoBot\\.`,
         parse_mode: "MarkdownV2",
         reply_markup: keyboard,
       });
 
-      startPaymentPolling(invoiceId, userId, tariffId, discount, ctx.chat!.id);
+      startPaymentPolling(invoice.invoice_id, userId, tariffId, discount, ctx.chat!.id);
     } catch (err) {
-      console.error("[buy_tariff] Ошибка создания инвойса:", err);
+      console.error("[pay_crypto] Ошибка создания инвойса:", err);
       await ctx.reply("❌ Не удалось создать счёт. Попробуйте позже.");
     }
+  });
+
+  bot.callbackQuery(/^pay_card:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.reply(
+      `💳 *Оплата картой*\n\nОплата картой временно недоступна\\. Скоро добавим 🙌\n\nЕсли хотите оплатить сейчас — выберите CryptoBot\\.`,
+      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("⚡ CryptoBot (USDT)", `pay_crypto:${ctx.match[1]}`) }
+    );
   });
 
   async function markInvoicePaid(
@@ -569,6 +590,25 @@ export function setupBotHandlers(bot: Bot): void {
     await ctx.answerCallbackQuery();
     const subId = ctx.match[1];
     const tariffId = ctx.match[2];
+
+    const tariff = TARIFFS.find((t) => t.id === tariffId);
+    if (!tariff) { await ctx.reply("❌ Тариф не найден."); return; }
+
+    const keyboard = new InlineKeyboard()
+      .text("⚡ CryptoBot (USDT)", `renew_crypto:${subId}:${tariffId}`).row()
+      .text("💳 Картой", `renew_card:${subId}:${tariffId}`).row()
+      .text("◀️ Назад", "profile");
+
+    await ctx.reply(
+      `🔄 *Продление подписки*\n📦 *${escapeMarkdown(tariff.label)}*\n\nВыберите способ оплаты:`,
+      { parse_mode: "MarkdownV2", reply_markup: keyboard }
+    );
+  });
+
+  bot.callbackQuery(/^renew_crypto:([^:]+):(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const subId = ctx.match[1];
+    const tariffId = ctx.match[2];
     const userId = BigInt(ctx.from.id);
 
     const tariff = TARIFFS.find((t) => t.id === tariffId);
@@ -625,16 +665,29 @@ export function setupBotHandlers(bot: Bot): void {
           `🧾 *Продление подписки*\n\n` +
           `📦 Тариф: *${escapeMarkdown(tariff.label)}*\n` +
           `💰 Сумма: *${usdtAmount} USDT* (~${escapeMarkdown(finalPrice.toString())} ₽)`,
+
         parse_mode: "MarkdownV2",
         reply_markup: keyboard,
       });
 
       startRenewalPolling(invoice.invoice_id, userId, subId, tariffId, discount, ctx.chat!.id);
     } catch (err) {
-      console.error("[renew_pay] Ошибка:", err);
+      console.error("[renew_crypto] Ошибка:", err);
       await ctx.reply("❌ Не удалось создать счёт. Попробуйте позже.");
     }
   });
+
+  bot.callbackQuery(/^renew_card:([^:]+):(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const subId = ctx.match[1];
+    const tariffId = ctx.match[2];
+    await ctx.reply(
+      `💳 *Оплата картой*\n\nОплата картой временно недоступна\\. Скоро добавим 🙌\n\nВыберите CryptoBot для оплаты сейчас\\.`,
+      { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("⚡ CryptoBot (USDT)", `renew_crypto:${subId}:${tariffId}`) }
+    );
+  });
+
+
 
   function startRenewalPolling(
     invoiceId: number,
