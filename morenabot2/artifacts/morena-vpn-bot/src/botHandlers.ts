@@ -762,7 +762,7 @@ export function setupBotHandlers(bot: Bot): void {
       `• *macOS* — [GitHub Releases](https://github.com/hiddify/hiddify-app/releases)\n` +
       `• *Android* — [Google Play](https://play.google.com/store/apps/details?id=app.hiddify.com)\n` +
       `• *iOS / iPadOS* — [App Store](https://apps.apple.com/app/hiddify/id6596777532)\n\n` +
-      `Альтернативные клиенты: *V2rayNG* (Android) или *V2box* (iOS)\\.\n\n` +
+      `Альтернативные клиенты: *V2rayNG* \\(Android\\) или *V2box* \\(iOS\\)\\.\n\n` +
       `\\#\\#\\#\\# 2\\. Добавление подписки\n\n` +
       `После покупки подписки в боте вы получите ключ доступа\\.\n\n` +
       `• Откройте Hiddify\n` +
