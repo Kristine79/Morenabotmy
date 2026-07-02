@@ -77,9 +77,10 @@ export function setupBotHandlers(bot: Bot): void {
           if (referrer) {
             referredById = refId;
 
-            await prisma.user.update({
+            await prisma.user.upsert({
               where: { id: refId },
-              data: { balance: { increment: REFERRAL_BONUS } },
+              update: { balance: { increment: REFERRAL_BONUS } },
+              create: { id: refId, balance: REFERRAL_BONUS },
             });
 
             try {
