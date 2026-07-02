@@ -17,7 +17,7 @@ import QRCode from "qrcode";
 import { prisma } from "./db.js";
 import { royaltyKey } from "./royaltyKeyApi.js";
 import { cryptoBot, USDT_RUB_RATE } from "./cryptoBotApi.js";
-import { CLASSIC_TARIFFS, OBHOD_TARIFFS, TARIFFS, TRIAL_TARIFF_ID, TRIAL_DURATION_DAYS, REFERRAL_BONUS } from "./tariffs.js";
+import { CLASSIC_TARIFFS, OBHOD_TARIFFS, TARIFFS, TRIAL_TARIFF_ID, TRIAL_DURATION_DAYS, TRIAL_API_TARIFF, TRIAL_API_DAYS, REFERRAL_BONUS } from "./tariffs.js";
 import { escapeMarkdown, formatVpnKey, formatDate, subStatus } from "./helpers.js";
 
 export function setupBotHandlers(bot: Bot): void {
@@ -140,20 +140,24 @@ export function setupBotHandlers(bot: Bot): void {
     await ctx.reply("⏳ Активируем ваш пробный доступ...");
 
     try {
-      const vpnUser = await royaltyKey.createVPNUser(TRIAL_TARIFF_ID, userId);
+      // Step 1: Create VPN user
+      const vpnUser = await royaltyKey.createUser();
 
-      const expiresAt = new Date(vpnUser.expires_at || Date.now() + TRIAL_DURATION_DAYS * 86400000);
+      // Step 2: Add trial subscription (1 day regular)
+      const subResult = await royaltyKey.addSubscription(vpnUser.uuid, TRIAL_API_DAYS, TRIAL_API_TARIFF);
+
+      const expiresAt = new Date(Date.now() + TRIAL_DURATION_DAYS * 86400000);
       await prisma.subscription.create({
         data: {
-          id: vpnUser.id,
+          id: vpnUser.uuid,
           telegramUserId: userId,
-          vpnKey: vpnUser.vpn_key,
+          vpnKey: vpnUser.subscription_url,
           tariffId: TRIAL_TARIFF_ID,
           expiresAt,
         },
       });
 
-      await ctx.reply(formatVpnKey(vpnUser.vpn_key), {
+      await ctx.reply(formatVpnKey(vpnUser.subscription_url), {
         parse_mode: "MarkdownV2",
         reply_markup: new InlineKeyboard().text("ℹ️ Инструкция", "howto"),
       });
@@ -709,19 +713,27 @@ export function setupBotHandlers(bot: Bot): void {
     amountPaid?: number
   ): Promise<void> {
     try {
-      const vpnUser = await royaltyKey.createVPNUser(tariffId, userId);
-
       const tariffObj = TARIFFS.find((t) => t.id === tariffId);
-      const days = tariffObj?.durationDays ?? FALLBACK_DURATION_DAYS;
-      const expiresAt = vpnUser.expires_at
-        ? new Date(vpnUser.expires_at)
-        : new Date(Date.now() + days * 86400000);
+      if (!tariffObj) {
+        throw new Error(`Тариф ${tariffId} не найден`);
+      }
 
+      // Step 1: Create VPN user
+      const vpnUser = await royaltyKey.createUser();
+
+      // Step 2: Add subscription with correct tariff and days
+      const subResult = await royaltyKey.addSubscription(
+        vpnUser.uuid,
+        tariffObj.apiDays,
+        tariffObj.apiTariff
+      );
+
+      const expiresAt = new Date(Date.now() + tariffObj.durationDays * 86400000);
       await prisma.subscription.create({
         data: {
-          id: vpnUser.id,
+          id: vpnUser.uuid,
           telegramUserId: userId,
-          vpnKey: vpnUser.vpn_key,
+          vpnKey: vpnUser.subscription_url,
           tariffId,
           expiresAt,
         },
@@ -737,7 +749,7 @@ export function setupBotHandlers(bot: Bot): void {
       const expText = escapeMarkdown(formatDate(expiresAt));
       const successText =
         `🎉 *Оплата прошла успешно\\!*\n\n` +
-        `${formatVpnKey(vpnUser.vpn_key)}\n\n` +
+        `${formatVpnKey(vpnUser.subscription_url)}\n\n` +
         `📅 Действует до: *${expText}*`;
 
       const keyboard = new InlineKeyboard().text("ℹ️ Инструкция по настройке", "howto");
@@ -1035,14 +1047,20 @@ export function setupBotHandlers(bot: Bot): void {
     bonusUsed: number
   ): Promise<void> {
     try {
-      const renewed = await royaltyKey.renewSubscription(subId, tariffId);
-      const expiresAt = renewed.expires_at
-        ? new Date(renewed.expires_at)
-        : new Date(Date.now() + FALLBACK_DURATION_DAYS * 86400000);
+      // Получаем текущую подписку для получения vpnUserId (uuid)
+      const sub = await prisma.subscription.findUnique({ where: { id: subId } });
+      if (!sub) throw new Error("Subscription not found");
+
+      const tariff = TARIFFS.find((t) => t.id === tariffId);
+      if (!tariff) throw new Error("Tariff not found");
+
+      // Renewal = add subscription to existing user
+      const result = await royaltyKey.addSubscription(sub.id, tariff.apiDays, tariff.apiTariff);
+      const expiresAt = new Date(Date.now() + tariff.durationDays * 86400000);
 
       await prisma.subscription.update({
         where: { id: subId },
-        data: { expiresAt, vpnKey: renewed.vpn_key, tariffId },
+        data: { expiresAt, tariffId },
       });
 
       if (bonusUsed > 0) {
@@ -1053,7 +1071,7 @@ export function setupBotHandlers(bot: Bot): void {
       }
 
       const expText = escapeMarkdown(formatDate(expiresAt));
-      const msg = `✅ *Подписка продлена\\!*\n\n📅 Действует до: *${expText}*\n\n${formatVpnKey(renewed.vpn_key)}`;
+      const msg = `✅ *Подписка продлена\\!*\n\n📅 Действует до: *${expText}*\n\n${formatVpnKey(sub.vpnKey)}`;
 
       if (typeof target === "object" && "reply" in target) {
         await (target as { reply: Function }).reply(msg, { parse_mode: "MarkdownV2" });

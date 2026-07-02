@@ -1,105 +1,106 @@
 /**
- * Модуль для работы с API RoyaltyKey
- * Документация: https://royaltykey.com/api
- *
- * Используется для управления VPN-подписками реселлера.
+ * Модуль для работы с API RoyaltyKey VPN
+ * Документация: https://api.royaltykey.ru/docs
+ * 
+ * API ключ передается в URL: https://api.royaltykey.ru/{api_key}/...
+ * 
+ * Два тарифа:
+ * - "regular" — Классик (безлимитный трафик, только быстрые серверы)
+ * - "lte" — Цифровой камуфляж / Обход LTE (все серверы, лимит ГБ)
  */
 
 import "dotenv/config";
 import axios, { AxiosError } from "axios";
 
-const BASE_URL = "https://royaltykey.com/api/v1";
+const BASE_URL = "https://api.royaltykey.ru";
 
-interface RoyaltyKeyProfile {
+export interface RoyaltyKeyUser {
+  uuid: string;
+  username: string;
+  subscription_url: string;
+}
+
+export interface RoyaltyKeyUserDetails extends RoyaltyKeyUser {
+  status: "ACTIVE" | "EXPIRED" | "DISABLED";
+  expire_at: string;
+  created_at: string;
+  traffic: {
+    used_bytes: number;
+    lifetime_used_bytes: number;
+  };
+}
+
+export interface RoyaltyKeySubscriptionResult {
+  success: boolean;
+  days_added: number;
+  price: number;
+  new_balance: number;
+}
+
+export interface RoyaltyKeyBalance {
   balance: number;
-  discount: number;
+  subscriptions: {
+    "1d": number;
+    "7d": number;
+    "30d": number;
+    "90d": number;
+    "180d": number;
+    "365d": number;
+  };
+  prices: {
+    "7d": { base: number; current: number };
+    "30d": { base: number; current: number };
+    "90d": { base: number; current: number };
+    "180d": { base: number; current: number };
+    "365d": { base: number; current: number };
+  };
 }
 
-interface RoyaltyKeyUser {
-  id: string;
-  vpn_key: string;
-  expires_at: string;
-  tariff_id: string;
-}
-
-/**
- * Обработать ошибку API и вернуть понятное сообщение
- */
 function handleApiError(error: unknown): string {
   if (error instanceof AxiosError) {
     if (error.response) {
       const status = error.response.status;
-      const data = error.response.data as string | { message?: string };
+      const data = error.response.data as { detail?: string } | string;
+      const msg = typeof data === 'object' && data?.detail ? data.detail : String(data);
       
-      if (status === 403) {
-        return `403 Forbidden: доступ запрещён. Проверьте API ключ или свяжитесь с поддержкой RoyaltyKey.`;
-      }
-      if (status === 401) {
-        return `401 Unauthorized: неверный API ключ. Проверьте ROYALTYKEY_API_KEY.`;
-      }
-      if (status === 429) {
-        return `429 Too Many Requests: превышен лимит запросов. Попробуйте позже.`;
-      }
-      if (status >= 500) {
-        return `${status} Server Error: проблема на стороне API. Попробуйте позже.`;
-      }
-      
-      const msg = typeof data === 'object' && data?.message ? data.message : String(data);
+      if (status === 400) return `400 Bad Request: ${msg}`;
+      if (status === 402) return `402 Payment Required: ${msg}`;
+      if (status === 403) return `403 Forbidden: API ключ не найден, деактивирован или неверный формат`;
+      if (status === 404) return `404 Not Found: ${msg}`;
+      if (status === 409) return `409 Conflict: ${msg}`;
+      if (status >= 500) return `${status} Server Error: ${msg}`;
       return `Ошибка ${status}: ${msg}`;
     }
-    if (error.code === 'ECONNABORTED') {
-      return "Таймаут запроса: сервер не отвечает. Проверьте интернет-соединение.";
-    }
-    if (error.code === 'ENOTFOUND') {
-      return "DNS ошибка: не удалось найти сервер royalykey.com";
-    }
-    if (error.code === 'ECONNREFUSED') {
-      return "Connection refused: сервер отклонил соединение";
-    }
+    if (error.code === 'ECONNABORTED') return "Таймаут запроса: сервер не отвечает";
+    if (error.code === 'ENOTFOUND') return "DNS ошибка: не удалось найти сервер api.royaltykey.ru";
+    if (error.code === 'ECONNREFUSED') return "Connection refused: сервер отклонил соединение";
     return error.message;
   }
-  if (error instanceof Error) {
-    return error.message;
-  }
+  if (error instanceof Error) return error.message;
   return String(error);
 }
 
 export class RoyaltyKeyApi {
-  private readonly token: string;
-  private readonly headers: Record<string, string>;
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
   private readonly timeout: number;
   private readonly proxyUrl: string | undefined;
 
   constructor() {
-    const token = process.env.ROYALTYKEY_API_KEY;
-    if (!token) throw new Error("ROYALTYKEY_API_KEY не задан в переменных окружения");
-    this.token = token;
+    const apiKey = process.env.ROYALTYKEY_API_KEY;
+    if (!apiKey) throw new Error("ROYALTYKEY_API_KEY не задан в переменных окружения");
+    this.apiKey = apiKey;
+    this.baseUrl = `${BASE_URL}/${apiKey}`;
     this.timeout = parseInt(process.env.ROYALTYKEY_TIMEOUT ?? "10000");
     
-    // Поддержка HTTP-прокси для обхода блокировок IP (опционально)
     const proxyEnv = process.env.ROYALTYKEY_PROXY;
     this.proxyUrl = proxyEnv && proxyEnv.startsWith("http") ? proxyEnv : undefined;
-    
-    // Полные заголовки для прохождения WAF
-    this.headers = {
-      Authorization: `Bearer ${this.token}`,
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-      "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
-      "User-Agent": "MorenaVPN/1.0 (Telegram Bot)",
-      "Cache-Control": "no-cache",
-      "Referer": "https://royaltykey.com/",
-      "Origin": "https://royaltykey.com",
-    };
     
     if (this.proxyUrl) {
       console.log(`[RoyaltyKey] Используется прокси: ${this.proxyUrl}`);
     }
   }
 
-/**
-   * Построить конфигурацию прокси
-   */
   private buildProxyConfig() {
     if (!this.proxyUrl) return false;
     const url = new URL(this.proxyUrl);
@@ -110,79 +111,122 @@ export class RoyaltyKeyApi {
     };
   }
 
-  async getProfile(): Promise<RoyaltyKeyProfile> {
-    try {
-      const response = await axios.get(`${BASE_URL}/reseller/profile`, {
-        headers: this.headers,
-        timeout: this.timeout,
-        proxy: this.buildProxyConfig(),
-      });
-      return response.data;
-    } catch (error) {
-      throw new Error(`[RoyaltyKey.getProfile] ${handleApiError(error)}`);
-    }
-  }
-
   /**
-   * Создать нового VPN-пользователя и активировать тариф
-   * @param tariffId - ID тарифа (например 'trial_24h', '1month', '3month')
-   * @param tgUserId - Telegram ID пользователя (используется как метка)
+   * Создать нового VPN пользователя (бесплатно)
+   * Не списывает средства с баланса
+   * Возвращает uuid и subscription_url для подключения клиента
    */
-  async createVPNUser(tariffId: string, tgUserId: bigint): Promise<RoyaltyKeyUser> {
+  async createUser(): Promise<RoyaltyKeyUser> {
     try {
       const response = await axios.post(
-        `${BASE_URL}/users`,
-        {
-          tariff_id: tariffId,
-          external_id: tgUserId.toString(),
-        },
+        `${this.baseUrl}/users`,
+        {},
         { 
-          headers: this.headers, 
           timeout: this.timeout,
           proxy: this.buildProxyConfig(),
         }
       );
       return response.data;
     } catch (error) {
-      throw new Error(`[RoyaltyKey.createVPNUser] ${handleApiError(error)}`);
+      throw new Error(`[RoyaltyKey.createUser] ${handleApiError(error)}`);
     }
   }
 
   /**
-   * Продлить существующую подписку пользователя
-   * @param vpnUserId - ID пользователя в системе RoyaltyKey
-   * @param tariffId - ID нового тарифа для продления
+   * Добавить подписку пользователю (списывает средства с баланса API ключа)
+   * @param vpnUuid - UUID пользователя из createUser
+   * @param days - Период: 1, 7, 30, 90, 180, 365
+   * @param tariff - Тариф: "regular" (Классик) или "lte" (Цифровой камуфляж/Обход LTE)
    */
-  async renewSubscription(vpnUserId: string, tariffId: string): Promise<RoyaltyKeyUser> {
+  async addSubscription(
+    vpnUuid: string, 
+    days: number, 
+    tariff: "regular" | "lte"
+  ): Promise<RoyaltyKeySubscriptionResult> {
     try {
       const response = await axios.post(
-        `${BASE_URL}/users/${vpnUserId}/renew`,
-        { tariff_id: tariffId },
+        `${this.baseUrl}/users/${vpnUuid}/subscription`,
+        { days, tariff },
         { 
-          headers: this.headers, 
           timeout: this.timeout,
           proxy: this.buildProxyConfig(),
         }
       );
       return response.data;
     } catch (error) {
-      throw new Error(`[RoyaltyKey.renewSubscription] ${handleApiError(error)}`);
+      throw new Error(`[RoyaltyKey.addSubscription] ${handleApiError(error)}`);
     }
   }
 
   /**
-   * Удалить / деактивировать пользователя в RoyaltyKey
-   * @param vpnUserId - ID пользователя в системе RoyaltyKey
+   * Получить детали пользователя включая трафик
    */
-  async deleteUser(vpnUserId: string): Promise<void> {
+  async getUser(vpnUuid: string): Promise<RoyaltyKeyUserDetails> {
     try {
-      await axios.delete(`${BASE_URL}/users/${vpnUserId}`, {
-        headers: this.headers,
-        timeout: this.timeout,
-        proxy: this.buildProxyConfig(),
-      });
+      const response = await axios.get(
+        `${this.baseUrl}/users/${vpnUuid}`,
+        { 
+          timeout: this.timeout,
+          proxy: this.buildProxyConfig(),
+        }
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(`[RoyaltyKey.getUser] ${handleApiError(error)}`);
+    }
+  }
+
+  /**
+   * Получить список всех пользователей
+   */
+  async listUsers(): Promise<{ users: RoyaltyKeyUserDetails[]; total: number }> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/users`,
+        { 
+          timeout: this.timeout,
+          proxy: this.buildProxyConfig(),
+        }
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(`[RoyaltyKey.listUsers] ${handleApiError(error)}`);
+    }
+  }
+
+  /**
+   * Удалить пользователя (необратимо)
+   */
+  async deleteUser(vpnUuid: string): Promise<{ success: boolean; deleted_uuid: string }> {
+    try {
+      const response = await axios.delete(
+        `${this.baseUrl}/users/${vpnUuid}`,
+        { 
+          timeout: this.timeout,
+          proxy: this.buildProxyConfig(),
+        }
+      );
+      return response.data;
     } catch (error) {
       throw new Error(`[RoyaltyKey.deleteUser] ${handleApiError(error)}`);
+    }
+  }
+
+  /**
+   * Получить баланс, цены и статистику
+   */
+  async getBalance(): Promise<RoyaltyKeyBalance> {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/balance`,
+        { 
+          timeout: this.timeout,
+          proxy: this.buildProxyConfig(),
+        }
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(`[RoyaltyKey.getBalance] ${handleApiError(error)}`);
     }
   }
 }

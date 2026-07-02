@@ -1,13 +1,19 @@
 /**
  * Конфигурация тарифов Morena VPN
+ * Маппинг на RoyaltyKey API:
+ * - CLASSIC (Regular): tariff="regular", days: 7, 30, 90, 180, 365
+ * - OBHOD (LTE Bypass): tariff="lte", days: 7, 30, 90, 180, 365
+ * - TRIAL: tariff="regular", days: 1 (только 1 раз на пользователя)
  */
 
 export interface Tariff {
-  id: string;           // ID тарифа в RoyaltyKey
+  id: string;           // Внутренний ID бота
   label: string;        // Отображаемое название
   priceRub: number;     // Цена в рублях (для бонусов и USDT)
   priceStars: number;   // Цена в Telegram Stars
   durationDays: number; // Срок действия в днях
+  apiTariff: "regular" | "lte"; // Тариф для RoyaltyKey API
+  apiDays: number;      // Дни для RoyaltyKey API
 }
 
 export const CLASSIC_TARIFFS: Tariff[] = [
@@ -17,6 +23,8 @@ export const CLASSIC_TARIFFS: Tariff[] = [
     priceRub: 119,
     priceStars: 50,
     durationDays: 7,
+    apiTariff: "regular",
+    apiDays: 7,
   },
   {
     id: "classic_30days",
@@ -24,6 +32,8 @@ export const CLASSIC_TARIFFS: Tariff[] = [
     priceRub: 249,
     priceStars: 100,
     durationDays: 30,
+    apiTariff: "regular",
+    apiDays: 30,
   },
   {
     id: "classic_90days",
@@ -31,6 +41,8 @@ export const CLASSIC_TARIFFS: Tariff[] = [
     priceRub: 590,
     priceStars: 250,
     durationDays: 90,
+    apiTariff: "regular",
+    apiDays: 90,
   },
   {
     id: "classic_180days",
@@ -38,6 +50,8 @@ export const CLASSIC_TARIFFS: Tariff[] = [
     priceRub: 1190,
     priceStars: 500,
     durationDays: 180,
+    apiTariff: "regular",
+    apiDays: 180,
   },
   {
     id: "classic_365days",
@@ -45,6 +59,8 @@ export const CLASSIC_TARIFFS: Tariff[] = [
     priceRub: 1990,
     priceStars: 800,
     durationDays: 365,
+    apiTariff: "regular",
+    apiDays: 365,
   },
 ];
 
@@ -55,6 +71,8 @@ export const OBHOD_TARIFFS: Tariff[] = [
     priceRub: 149,
     priceStars: 0,
     durationDays: 7,
+    apiTariff: "lte",
+    apiDays: 7,
   },
   {
     id: "obhod_30days",
@@ -62,6 +80,8 @@ export const OBHOD_TARIFFS: Tariff[] = [
     priceRub: 390,
     priceStars: 0,
     durationDays: 30,
+    apiTariff: "lte",
+    apiDays: 30,
   },
   {
     id: "obhod_90days",
@@ -69,6 +89,8 @@ export const OBHOD_TARIFFS: Tariff[] = [
     priceRub: 790,
     priceStars: 0,
     durationDays: 90,
+    apiTariff: "lte",
+    apiDays: 90,
   },
   {
     id: "obhod_180days",
@@ -76,6 +98,8 @@ export const OBHOD_TARIFFS: Tariff[] = [
     priceRub: 1490,
     priceStars: 0,
     durationDays: 180,
+    apiTariff: "lte",
+    apiDays: 180,
   },
   {
     id: "obhod_365days",
@@ -83,13 +107,17 @@ export const OBHOD_TARIFFS: Tariff[] = [
     priceRub: 2990,
     priceStars: 0,
     durationDays: 365,
+    apiTariff: "lte",
+    apiDays: 365,
   },
 ];
 
 export const TARIFFS: Tariff[] = [...CLASSIC_TARIFFS, ...OBHOD_TARIFFS];
 
-export const TRIAL_TARIFF_ID = "trial24h";
+export const TRIAL_TARIFF_ID = "trial_1day";
 export const TRIAL_DURATION_DAYS = 1;
+export const TRIAL_API_TARIFF = "regular" as const;
+export const TRIAL_API_DAYS = 1;
 
 // Реферальный бонус в рублях
 export const REFERRAL_BONUS = 50;
