@@ -17,7 +17,7 @@ import QRCode from "qrcode";
 import { prisma } from "./db.js";
 import { royaltyKey } from "./royaltyKeyApi.js";
 import { cryptoBot, USDT_RUB_RATE } from "./cryptoBotApi.js";
-import { TARIFFS, TRIAL_TARIFF_ID, TRIAL_DURATION_DAYS, REFERRAL_BONUS } from "./tariffs.js";
+import { CLASSIC_TARIFFS, OBHOD_TARIFFS, TARIFFS, TRIAL_TARIFF_ID, TRIAL_DURATION_DAYS, REFERRAL_BONUS } from "./tariffs.js";
 import { escapeMarkdown, formatVpnKey, formatDate, subStatus } from "./helpers.js";
 
 export function setupBotHandlers(bot: Bot): void {
@@ -167,12 +167,37 @@ export function setupBotHandlers(bot: Bot): void {
 
   bot.callbackQuery("buy", async (ctx) => {
     await ctx.answerCallbackQuery();
+    const text =
+      `*Выберите тип тарифа*\n\n` +
+      `🌟 *Тариф — Классик*\n` +
+      `Скоростные сервера 10 Гбит, без ограничений и лимитов\\.\n\n` +
+      `📶 *Тариф — Обход*\n` +
+      `Специализированные и стабильные сервера для обхода белых списков, поддерживают работу во всех регионах\\.\n\n` +
+      `Выберите желаемый тариф:`;
+
+    const keyboard = new InlineKeyboard()
+      .text("🌟 Классик", "buy_type:classic").row()
+      .text("📶 Обход", "buy_type:obhod").row()
+      .text("◀️ Назад", "menu");
+
+    await ctx.reply(text, {
+      parse_mode: "MarkdownV2",
+      reply_markup: keyboard,
+    });
+  });
+
+  bot.callbackQuery(/^buy_type:(classic|obhod)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const type = ctx.match[1];
     const userId = BigInt(ctx.from.id);
     const user = await prisma.user.findUnique({ where: { id: userId } });
     const bonus = user?.balance ?? 0;
 
+    const tariffs = type === "classic" ? CLASSIC_TARIFFS : OBHOD_TARIFFS;
+    const label = type === "classic" ? "🌟 Классик" : "📶 Обход";
+
     const keyboard = new InlineKeyboard();
-    for (const tariff of TARIFFS) {
+    for (const tariff of tariffs) {
       const finalPrice = Math.max(0, tariff.priceRub - bonus);
       const usdtPrice = (finalPrice / USDT_RUB_RATE).toFixed(2);
       const priceText =
@@ -181,14 +206,14 @@ export function setupBotHandlers(bot: Bot): void {
           : `${tariff.label}`;
       keyboard.text(priceText, `buy_tariff:${tariff.id}`).row();
     }
-    keyboard.text("◀️ Назад", "menu");
+    keyboard.text("◀️ Назад", "buy");
 
     const bonusText =
       bonus > 0
         ? escapeMarkdown(`\n\n💰 У вас ${bonus} ₽ бонуса — скидка применена автоматически.`)
         : "";
 
-    await ctx.reply(`⚡ *Выберите тариф Morena VPN:*${bonusText}`, {
+    await ctx.reply(`*${label}*\n\n⚡ Выберите тариф:${bonusText}`, {
       parse_mode: "MarkdownV2",
       reply_markup: keyboard,
     });
