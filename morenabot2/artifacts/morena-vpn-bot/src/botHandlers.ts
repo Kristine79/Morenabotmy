@@ -1234,7 +1234,7 @@ export function setupBotHandlers(bot: Bot): void {
       `💡 *Совет:* если не работает — попробуйте переключить протокол или сервер в настройках приложения\\.\n\n` +
       `📄 [Политика конфиденциальности](https://telegra.ph/Politika-konfidencialnosti-06-21-31)\n` +
       `📋 [Пользовательское соглашение](https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19)\n\n` +
-      `По вопросам: @morena_vpn_support`,
+      `По вопросам: @morenavpnsupport_bot`,
       { parse_mode: "MarkdownV2", reply_markup: keyboard }
     );
   }
