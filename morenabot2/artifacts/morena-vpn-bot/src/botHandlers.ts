@@ -34,6 +34,7 @@ export function setupBotHandlers(bot: Bot): void {
       .text("🎁 🎟 Активировать свиток (Промокод)", "promo").row()
       .text("📜 Книга заклинаний (Инструкция)", "howto").row()
       .text("🤖 Полезные боты", "useful_bots").row()
+      .url("📢 Наш канал", "https://t.me/morenavpnnews").row()
       .text("🆘 Призвать помощь", "help");
   }
 
