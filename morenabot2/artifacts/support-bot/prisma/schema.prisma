@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Ticket {
+  id          String    @id @default(uuid())
+  userId      BigInt
+  username    String?
+  firstName   String?
+  lastName    String?
+  status      TicketStatus @default(OPEN)
+  subject     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  closedAt    DateTime?
+  closedBy    BigInt?
+  messages    Message[]
+}
+
+model Message {
+  id        String       @id @default(uuid())
+  ticketId  String
+  ticket    Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromUser  Boolean      @default(false) // false = admin, true = user
+  text      String
+  createdAt DateTime     @default(now())
+}
+
+enum TicketStatus {
+  OPEN
+  WAITING_USER
+  WAITING_ADMIN
+  CLOSED
+}

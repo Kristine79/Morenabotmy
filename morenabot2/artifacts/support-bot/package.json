@@ -1,0 +1,19 @@
+{
+  "name": "support-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/bot.ts",
+    "start": "tsx src/bot.ts",
+    "db:push": "prisma db push"
+  },
+  "dependencies": {
+    "grammy": "^1.44.0",
+    "@prisma/client": "^6.19.3"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.3",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
