@@ -88,7 +88,7 @@ export const OBHOD_TARIFFS: Tariff[] = [
 
 export const TARIFFS: Tariff[] = [...CLASSIC_TARIFFS, ...OBHOD_TARIFFS];
 
-export const TRIAL_TARIFF_ID = "trial_24h";
+export const TRIAL_TARIFF_ID = "trial24h";
 export const TRIAL_DURATION_DAYS = 1;
 
 // Реферальный бонус в рублях
