@@ -174,13 +174,13 @@ export function setupBotHandlers(bot: Bot): void {
       `*Выберите тип тарифа*\n\n` +
       `🌟 *Тариф — Классик*\n` +
       `Скоростные сервера 10 Гбит, без ограничений и лимитов\\.\n\n` +
-      `📶 *Тариф — Обход*\n` +
+      `🌌 *Тариф — Цифровой камуфляж*\n` +
       `Выделенные серверы высокой доступности, адаптированные для работы в условиях сетевых ограничений и нестабильных фильтров по всей стране\\.\n\n` +
       `Выберите желаемый тариф:`;
 
     const keyboard = new InlineKeyboard()
       .text("🌟 Классик", "buy_type:classic").row()
-      .text("📶 Обход", "buy_type:obhod").row()
+      .text("🌌 Цифровой камуфляж", "buy_type:obhod").row()
       .text("◀️ Назад", "menu");
 
     await ctx.reply(text, {
@@ -197,7 +197,7 @@ export function setupBotHandlers(bot: Bot): void {
     const bonus = user?.balance ?? 0;
 
     const tariffs = type === "classic" ? CLASSIC_TARIFFS : OBHOD_TARIFFS;
-    const label = type === "classic" ? "🌟 Классик" : "📶 Обход";
+    const label = type === "classic" ? "🌟 Классик" : "🌌 Цифровой камуфляж";
 
     const keyboard = new InlineKeyboard();
     for (const tariff of tariffs) {
