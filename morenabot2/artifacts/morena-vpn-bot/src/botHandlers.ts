@@ -1168,7 +1168,7 @@ export function setupBotHandlers(bot: Bot): void {
       `• Бурелом в соединении\n` +
       `• Золото не доходит\n` +
       `• Оберег сломался\n\n` +
-      `Волхв: @morena_vpn_support`,
+      `Волхв: @morenavpnsupport_bot`,
       { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("↩️ Вернуться в чащу", "menu") }
     );
   });
@@ -1304,7 +1304,7 @@ export function setupBotHandlers(bot: Bot): void {
         `• /menu — Главное меню\n` +
         `• /profile — Личный кабинет\n` +
         `• /help — Помощь\n\n` +
-        `По вопросам: @morena_vpn_support`,
+`По вопросам: @morenavpnsupport_bot`,
         { parse_mode: "MarkdownV2" }
       );
       return;
@@ -1421,10 +1421,9 @@ export function setupBotHandlers(bot: Bot): void {
       `• /menu — Показать главное меню\n` +
       `• /profile — Личный кабинет\n` +
       `• /manual — Инструкция по настройке\n` +
-      `• /help — Эта справка\n\n` +
-      `По вопросам: @morena_vpn_support`,
+`• /help — Эта справка\n\n` +
+      `По вопросам: @morenavpnsupport_bot`,
       { parse_mode: "MarkdownV2" }
     );
   });
-
 }
