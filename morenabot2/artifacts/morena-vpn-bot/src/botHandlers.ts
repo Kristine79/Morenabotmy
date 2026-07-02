@@ -28,14 +28,15 @@ export function setupBotHandlers(bot: Bot): void {
   function mainMenuKeyboard(): InlineKeyboard {
     return new InlineKeyboard()
       .text("🔮 Испытать магию (Тест 24ч)", "trial").row()
-      .text("💎 Обрести силу (Купить VPN)", "buy").row()
+      .text("💎 Обрести силу (Купить)", "buy").row()
+      .text("🏯 Личный чертог", "profile")
       .text("🎁 Подарить подписку", "gift").row()
-      .text("👤 Личный чертог", "profile").row()
-      .text("🎁 🎟 Активировать свиток (Промокод)", "promo").row()
-      .text("📜 Книга заклинаний (Инструкция)", "howto").row()
-      .text("🤖 Полезные боты", "useful_bots").row()
-      .url("📢 Наш канал", "https://t.me/morenavpnnews").row()
-      .text("🆘 Призвать помощь", "help");
+      .text("📜 Активировать свиток", "promo")
+      .text("📖 Книга заклинаний", "howto").row()
+      .text("🤖 Полезные боты", "useful_bots")
+      .text("🆘 Призвать помощь", "help")
+      .row()
+      .url("📢 Наш канал", "https://t.me/morenavpnnews").row();
   }
 
   const promoMode = new Set<number>();
