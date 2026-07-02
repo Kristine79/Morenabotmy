@@ -160,9 +160,13 @@ export function setupBotHandlers(bot: Bot): void {
         },
       });
 
+      const trialSiteUrl = `https://autoconnect-chi.vercel.app/?key=${encodeURIComponent(vpnUser.subscription_url)}`;
       await ctx.reply(formatVpnKey(vpnUser.subscription_url), {
         parse_mode: "MarkdownV2",
-        reply_markup: new InlineKeyboard().text("ℹ️ Инструкция", "howto"),
+        reply_markup: new InlineKeyboard()
+          .url("🚀 Автоподключение", trialSiteUrl)
+          .row()
+          .text("ℹ️ Инструкция", "howto"),
       });
     } catch (err) {
       // Откатываем флаг, т.к. создание ключа или подписки не удалось
@@ -782,7 +786,11 @@ export function setupBotHandlers(bot: Bot): void {
         `${formatVpnKey(vpnUser.subscription_url)}\n\n` +
         `📅 Действует до: *${expText}*`;
 
-      const keyboard = new InlineKeyboard().text("ℹ️ Инструкция по настройке", "howto");
+      const purchaseSiteUrl = `https://autoconnect-chi.vercel.app/?key=${encodeURIComponent(vpnUser.subscription_url)}`;
+      const keyboard = new InlineKeyboard()
+        .url("🚀 Автоподключение", purchaseSiteUrl)
+        .row()
+        .text("ℹ️ Инструкция по настройке", "howto");
 
       if (typeof target === "object" && "reply" in target) {
         await (target as { reply: Function }).reply(successText, {
@@ -1101,12 +1109,17 @@ export function setupBotHandlers(bot: Bot): void {
       }
 
       const expText = escapeMarkdown(formatDate(expiresAt));
+      const renewSiteUrl = `https://autoconnect-chi.vercel.app/?key=${encodeURIComponent(sub.vpnKey)}`;
+      const renewKeyboard = new InlineKeyboard()
+        .url("🚀 Автоподключение", renewSiteUrl)
+        .row()
+        .text("ℹ️ Инструкция по настройке", "howto");
       const msg = `✅ *Подписка продлена\\!*\n\n📅 Действует до: *${expText}*\n\n${formatVpnKey(sub.vpnKey)}`;
 
       if (typeof target === "object" && "reply" in target) {
-        await (target as { reply: Function }).reply(msg, { parse_mode: "MarkdownV2" });
+        await (target as { reply: Function }).reply(msg, { parse_mode: "MarkdownV2", reply_markup: renewKeyboard });
       } else {
-        await bot.api.sendMessage(target as number, msg, { parse_mode: "MarkdownV2" });
+        await bot.api.sendMessage(target as number, msg, { parse_mode: "MarkdownV2", reply_markup: renewKeyboard });
       }
     } catch (err) {
       console.error("[processRenewal] Ошибка:", err);
@@ -1210,7 +1223,7 @@ export function setupBotHandlers(bot: Bot): void {
       .row()
       .url("📥 Скачать для macOS", "https://github.com/hiddify/hiddify-app/releases/latest")
       .row()
-      .url("📖 Полная инструкция на сайте", "https://morenamanualsite.vercel.app/")
+      .url("📖 Полная инструкция на сайте", "https://autoconnect-chi.vercel.app")
       .row()
       .text("◀️ В меню", "menu");
 

@@ -48,13 +48,13 @@ function openDb(): InstanceType<typeof Database> {
 
 router.get("/admin/reseller/profile", async (req: Request, res: Response): Promise<void> => {
   try {
-    const response = await axios.get(`${ROYALTYKEY_BASE}/reseller/profile`, {
-      headers: getHeaders(),
-    });
-    const data = response.data as { balance: number; discount: number };
+    const apiKey = process.env.ROYALTYKEY_API_KEY;
+    if (!apiKey) throw new Error("ROYALTYKEY_API_KEY не задан");
+    const response = await axios.get(`https://api.royaltykey.ru/${apiKey}/balance`);
+    const data = response.data as { balance: number };
     res.json(GetResellerProfileResponse.parse({
       balance: data.balance,
-      discount: data.discount,
+      discount: 0,
     }));
   } catch (err: unknown) {
     req.log.error({ err }, "RoyaltyKey getProfile failed");
