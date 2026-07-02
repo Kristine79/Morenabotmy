@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.ts",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.mjs --format=esm --sourcemap --external:pino-pretty",
-    "start": "node --enable-source-maps dist/index.mjs"
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.cjs --format=cjs --sourcemap",
+    "start": "node --enable-source-maps dist/index.cjs"
   },
   "dependencies": {
     "express": "^5.1.0",
