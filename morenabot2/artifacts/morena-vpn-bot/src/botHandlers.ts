@@ -27,14 +27,14 @@ export function setupBotHandlers(bot: Bot): void {
 
   function mainMenuKeyboard(): InlineKeyboard {
     return new InlineKeyboard()
-      .text("🔮 Активировать тест (24ч)", "trial").row()
-      .text("⚡ Купить Morena VPN", "buy").row()
+      .text("🔮 Испытать магию (Тест 24ч)", "trial").row()
+      .text("💎 Обрести силу (Купить VPN)", "buy").row()
       .text("🎁 Подарить подписку", "gift").row()
       .text("👤 Личный чертог", "profile").row()
-      .text("🎟️ Активировать промокод", "promo").row()
-      .text("ℹ️ Инструкция по настройке", "howto").row()
+      .text("🎁 🎟 Активировать свиток (Промокод)", "promo").row()
+      .text("📜 Книга заклинаний (Инструкция)", "howto").row()
       .text("🤖 Полезные боты", "useful_bots").row()
-      .text("❓ Помощь", "help");
+      .text("🆘 Призвать помощь", "help");
   }
 
   const promoMode = new Set<number>();
@@ -42,9 +42,12 @@ export function setupBotHandlers(bot: Bot): void {
 
   function mainMenuText(): string {
     return (
-      `🌙 *Добро пожаловать в Morena VPN\\!*\n\n` +
-      `Быстрый, безопасный и надёжный VPN для тех, кто ценит свободу в интернете\\.\n\n` +
-      `Выберите действие:`
+      `🌙 *Добро пожаловать в чертоги Morena VPN\\!*\n\n` +
+      `Здесь живет древняя цифровая магия, которая стирает любые границы в сети\\. Наш VPN невидим для блокировок и цензуры благодаря передовой защите VLESS Reality\\.\n\n` +
+      `⚡️ Сверхбыстрые каналы до 10 Гбит/с — стриминг в 4K и игры без задержек\\.\n` +
+      `🛡 Полная анонимность, индивидуальные ключи и защищенный DNS без логирования\\.\n` +
+      `🌍 8 суверенных локаций в Европе и Азии в один клик\\.\n\n` +
+      `Выберите действие, странник 👇`
     );
   }
 
