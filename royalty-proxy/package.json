@@ -9,15 +9,16 @@
     "start": "node --enable-source-maps dist/index.cjs"
   },
   "dependencies": {
-    "express": "^5.1.0",
-    "cors": "^2.8.5",
     "axios": "^1.18.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^5.1.0",
     "pino": "^9.14.0",
     "pino-pretty": "^13.1.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
     "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.7.0"
