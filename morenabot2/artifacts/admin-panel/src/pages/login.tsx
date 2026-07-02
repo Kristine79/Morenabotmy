@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { getAuthConfig } from "@workspace/api-client-react";
-import { Shield, Loader2 } from "lucide-react";
+import { Shield, Loader2, Bug, Key } from "lucide-react";
 
 declare global {
   interface Window {
@@ -15,6 +15,7 @@ export default function Login() {
   const [botUsername, setBotUsername] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [devId, setDevId] = useState("");
 
   useEffect(() => {
     getAuthConfig()
@@ -30,6 +31,7 @@ export default function Login() {
       setLoading(true);
       try {
         await login(user);
+        setLoading(false);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Ошибка авторизации";
         setError(msg.includes("403") || msg.includes("forbidden") || msg.includes("администратором")
@@ -101,6 +103,55 @@ export default function Login() {
             <p>Доступ только для администратора</p>
             <p className="opacity-60">Бот: @{botUsername ?? "..."}</p>
           </div>
+
+          {window.location.hostname === "localhost" && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">Dev</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="relative">
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Telegram ID администратора"
+                    value={devId}
+                    onChange={(e) => setDevId(e.target.value)}
+                    className="w-full rounded-md border border-border bg-background pl-10 pr-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!devId.trim()) { setError("Введите Telegram ID"); return; }
+                    setLoading(true);
+                    setError(null);
+                    try {
+                      const res = await fetch("/api/auth/dev-login", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: Number(devId.trim()) }),
+                      });
+                      if (!res.ok) throw new Error((await res.json()).error);
+                      window.location.reload();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Ошибка dev-логина");
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-border bg-secondary/50 hover:bg-secondary px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <Bug className="h-4 w-4" />
+                  Dev Login
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

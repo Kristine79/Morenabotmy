@@ -16,7 +16,8 @@ model User {
   username     String?
   balance      Int     @default(0)   // Бонусный баланс в рублях
   referredById BigInt?               // ID пригласившего пользователя
-  hasUsedTrial Boolean @default(false) // Использован ли пробный период
+  hasUsedTrial   Boolean  @default(false) // Использован ли пробный период
+  lastActivityAt DateTime?               // Последняя активность (для статистики)
 
   subscriptions  Subscription[]
   payments       Payment[]

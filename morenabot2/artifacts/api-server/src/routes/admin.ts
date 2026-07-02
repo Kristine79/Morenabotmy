@@ -48,6 +48,8 @@ router.get("/admin/stats", async (_req: Request, res: Response): Promise<void> =
   try {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const totalUsers = (db.prepare("SELECT COUNT(*) as n FROM User").get() as { n: number }).n;
     const trialUsers = (db.prepare("SELECT COUNT(*) as n FROM User WHERE hasUsedTrial = 1").get() as { n: number }).n;
@@ -63,6 +65,16 @@ router.get("/admin/stats", async (_req: Request, res: Response): Promise<void> =
     ).n;
     const pendingPayments = (db.prepare("SELECT COUNT(*) as n FROM Payment WHERE status = 'pending'").get() as { n: number }).n;
     const paidPayments = (db.prepare("SELECT COUNT(*) as n FROM Payment WHERE status = 'paid'").get() as { n: number }).n;
+
+    const activeToday = (
+      db.prepare("SELECT COUNT(*) as n FROM User WHERE lastActivityAt >= ?").get(todayStart) as { n: number }
+    ).n;
+    const activeWeek = (
+      db.prepare("SELECT COUNT(*) as n FROM User WHERE lastActivityAt >= ?").get(weekAgo) as { n: number }
+    ).n;
+    const activeMonth = (
+      db.prepare("SELECT COUNT(*) as n FROM User WHERE lastActivityAt >= ?").get(monthAgo) as { n: number }
+    ).n;
 
     const recentPaymentsRaw = db.prepare(`
       SELECT p.id, p.telegramUserId, u.username, p.tariffId, p.amount, p.status
@@ -94,6 +106,9 @@ router.get("/admin/stats", async (_req: Request, res: Response): Promise<void> =
       paidPayments,
       revenueToday,
       newUsersToday,
+      activeToday,
+      activeWeek,
+      activeMonth,
       recentPayments,
     }));
   } finally {
@@ -126,7 +141,7 @@ router.get("/admin/users", async (req: Request, res: Response): Promise<void> =>
     ).n;
 
     const users = db.prepare(`
-      SELECT u.id, u.username, u.balance, u.hasUsedTrial, u.referredById,
+      SELECT u.id, u.username, u.balance, u.hasUsedTrial, u.referredById, u.lastActivityAt,
              COUNT(s.id) as subscriptionCount
       FROM User u
       LEFT JOIN Subscription s ON s.telegramUserId = u.id
@@ -136,7 +151,8 @@ router.get("/admin/users", async (req: Request, res: Response): Promise<void> =>
       LIMIT ? OFFSET ?
     `).all(...params, limit, offset) as Array<{
       id: bigint | string; username: string | null; balance: number;
-      hasUsedTrial: number; referredById: bigint | string | null; subscriptionCount: number;
+      hasUsedTrial: number; referredById: bigint | string | null;
+      lastActivityAt: string | null; subscriptionCount: number;
     }>;
 
     res.json(ListAdminUsersResponse.parse({
@@ -147,6 +163,7 @@ router.get("/admin/users", async (req: Request, res: Response): Promise<void> =>
         hasUsedTrial: u.hasUsedTrial === 1,
         referredById: u.referredById ? u.referredById.toString() : null,
         subscriptionCount: u.subscriptionCount,
+        lastActivityAt: u.lastActivityAt ?? null,
       })),
       total,
       page,
@@ -258,8 +275,8 @@ router.get("/admin/subscriptions", async (req: Request, res: Response): Promise<
         username: s.username ?? null,
         vpnKey: s.vpnKey,
         tariffId: s.tariffId,
-        expiresAt: s.expiresAt,
-        isActive: s.expiresAt > now,
+        expiresAt: String(s.expiresAt),
+        isActive: Number(s.expiresAt) > Date.now(),
       })),
       total,
       page,

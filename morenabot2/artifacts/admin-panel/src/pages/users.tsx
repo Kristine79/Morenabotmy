@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { Search, Plus, Minus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -157,6 +157,7 @@ export default function Users() {
                       <TableHead>Баланс</TableHead>
                       <TableHead>Подписки</TableHead>
                       <TableHead>Пробный</TableHead>
+                      <TableHead>Последняя активность</TableHead>
                       <TableHead className="text-right">Действия</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -180,6 +181,9 @@ export default function Users() {
                             <Badge variant="outline" className="text-primary border-primary/30">Доступен</Badge>
                           )}
                         </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {user.lastActivityAt ? formatDate(user.lastActivityAt) : "—"}
+                        </TableCell>
                         <TableCell className="text-right">
                           <BalanceAdjustDialog 
                             userId={user.id} 
@@ -193,7 +197,7 @@ export default function Users() {
                     ))}
                     {data.items.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           Пользователи не найдены
                         </TableCell>
                       </TableRow>

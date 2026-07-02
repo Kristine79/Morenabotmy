@@ -37,7 +37,10 @@ export const GetAdminStatsResponse = zod.object({
   "tariffId": zod.string(),
   "amount": zod.number(),
   "status": zod.string()
-}))
+})),
+  "activeToday": zod.number(),
+  "activeWeek": zod.number(),
+  "activeMonth": zod.number()
 })
 
 
@@ -60,7 +63,8 @@ export const ListAdminUsersResponse = zod.object({
   "balance": zod.number(),
   "hasUsedTrial": zod.boolean(),
   "referredById": zod.string().nullish(),
-  "subscriptionCount": zod.number()
+  "subscriptionCount": zod.number(),
+  "lastActivityAt": zod.string().nullish()
 })),
   "total": zod.number(),
   "page": zod.number(),

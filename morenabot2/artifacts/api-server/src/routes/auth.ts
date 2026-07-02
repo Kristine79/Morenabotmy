@@ -123,4 +123,26 @@ router.post("/auth/logout", (req: Request, res: Response): void => {
   });
 });
 
+// ─── POST /auth/dev-login (только для разработки) ──────────────────────────────
+
+router.post("/auth/dev-login", (req: Request, res: Response): void => {
+  if (process.env.NODE_ENV !== "development") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const adminId = req.body?.id ? Number(req.body.id) : Number(process.env.ADMIN_TELEGRAM_ID ?? 0);
+  if (!adminId) { res.status(400).json({ error: "Telegram ID не указан" }); return; }
+
+  req.session.userId = adminId;
+  req.session.firstName = "Dev";
+  req.session.username = "admin";
+
+  res.json(TelegramLoginResponse.parse({
+    id: adminId,
+    firstName: "Dev",
+    username: "admin",
+  }));
+});
+
 export default router;

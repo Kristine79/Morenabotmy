@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { getAuthMe, logout as apiLogout, telegramLogin } from "@workspace/api-client-react";
 
 interface AuthUser {
@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = async (tgData: Record<string, string | number>) => {
+  const login = useCallback(async (tgData: Record<string, string | number>) => {
     const u = await telegramLogin({
       id: Number(tgData["id"]),
       hash: String(tgData["hash"]),
@@ -38,12 +38,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       photo_url: tgData["photo_url"] ? String(tgData["photo_url"]) : undefined,
     });
     setUser({ id: u.id, firstName: u.firstName, username: u.username });
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await apiLogout();
     setUser(null);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout }}>

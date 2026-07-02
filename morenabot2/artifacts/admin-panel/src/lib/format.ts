@@ -7,8 +7,11 @@ export function formatCurrency(amount: number) {
 }
 
 export function formatDate(dateString: string) {
+  const date = /^\d+$/.test(dateString)
+    ? new Date(Number(dateString))
+    : new Date(dateString);
   return new Intl.DateTimeFormat('ru-RU', {
     dateStyle: 'short',
     timeStyle: 'short'
-  }).format(new Date(dateString));
+  }).format(date);
 }

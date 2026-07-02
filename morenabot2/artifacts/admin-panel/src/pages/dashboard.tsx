@@ -1,6 +1,6 @@
 import { useGetAdminStats, useGetResellerProfile } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, CreditCard, Key, Activity, Wallet, Percent } from "lucide-react";
+import { Users, CreditCard, Key, Activity, Wallet, Percent, UserCheck } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -138,6 +138,42 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground mt-1">
                 {stats.pendingPayments} в ожидании
               </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Активность пользователей */}
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+          Активность пользователей
+        </h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Активно сегодня</CardTitle>
+              <UserCheck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.activeToday}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Активно за неделю</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.activeWeek}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Активно за месяц</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.activeMonth}</div>
             </CardContent>
           </Card>
         </div>
