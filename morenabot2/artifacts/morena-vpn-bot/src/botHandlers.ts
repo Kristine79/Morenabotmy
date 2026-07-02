@@ -163,9 +163,10 @@ export function setupBotHandlers(bot: Bot): void {
       });
     } catch (err) {
       // Откатываем флаг, т.к. создание ключа или подписки не удалось
-      await prisma.user.update({
+      await prisma.user.upsert({
         where: { id: userId },
-        data: { hasUsedTrial: false },
+        update: { hasUsedTrial: false },
+        create: { id: userId, hasUsedTrial: false },
       });
       console.error("[trial] Ошибка активации тестового доступа:", err);
       await ctx.reply("❌ Не удалось активировать тестовый доступ. Попробуйте позже или обратитесь в поддержку.");
@@ -250,14 +251,40 @@ export function setupBotHandlers(bot: Bot): void {
 
   bot.callbackQuery("gift", async (ctx) => {
     await ctx.answerCallbackQuery();
+    const text =
+      `🎁 *Подарить подписку*\n\n` +
+      `🌟 *Тариф — Классик*\n` +
+      `Скоростные серверы 10 Гбит, без ограничений и лимитов\\.\n\n` +
+      `🌌 *Тариф — Цифровой камуфляж*\n` +
+      `Специализированные серверы с технологией цифрового камуфляжа, гарантирующие стабильный доступ к важным ресурсам в любом регионе\\.\n\n` +
+      `Выберите желаемый тариф:`;
+
+    const keyboard = new InlineKeyboard()
+      .text("🌟 Классик", "gift_type:classic").row()
+      .text("🌌 Цифровой камуфляж", "gift_type:obhod").row()
+      .text("◀️ Назад", "menu");
+
+    await ctx.reply(text, {
+      parse_mode: "MarkdownV2",
+      reply_markup: keyboard,
+    });
+  });
+
+  bot.callbackQuery(/^gift_type:(classic|obhod)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const type = ctx.match[1];
+
+    const tariffs = type === "classic" ? CLASSIC_TARIFFS : OBHOD_TARIFFS;
+    const label = type === "classic" ? "🌟 Классик" : "🌌 Цифровой камуфляж";
+
     const keyboard = new InlineKeyboard();
-    for (const tariff of TARIFFS) {
+    for (const tariff of tariffs) {
       const usdtPrice = (tariff.priceRub / USDT_RUB_RATE).toFixed(2);
       keyboard.text(`${tariff.label} — ${usdtPrice} USDT`, `gift_tariff:${tariff.id}`).row();
     }
-    keyboard.text("◀️ Назад", "menu");
+    keyboard.text("◀️ Назад", "gift");
 
-    await ctx.reply("🎁 *Подарить подписку*\n\nВыберите тариф для подарка:", {
+    await ctx.reply(`*${label}*\n\n⚡ Выберите тариф:`, {
       parse_mode: "MarkdownV2",
       reply_markup: keyboard,
     });
