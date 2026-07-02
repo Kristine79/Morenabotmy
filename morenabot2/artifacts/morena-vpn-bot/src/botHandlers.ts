@@ -1170,7 +1170,7 @@ export function setupBotHandlers(bot: Bot): void {
       `• Бурелом в соединении\n` +
       `• Золото не доходит\n` +
       `• Оберег сломался\n\n` +
-      `Волхв: @morenavpnsupport_bot`,
+      `Волхв: @morenavpnsupport\\_bot`,
       { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("↩️ Вернуться в чащу", "menu") }
     );
   });
@@ -1234,7 +1234,7 @@ export function setupBotHandlers(bot: Bot): void {
       `💡 *Совет:* если не работает — попробуйте переключить протокол или сервер в настройках приложения\\.\n\n` +
       `📄 [Политика конфиденциальности](https://telegra.ph/Politika-konfidencialnosti-06-21-31)\n` +
       `📋 [Пользовательское соглашение](https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19)\n\n` +
-      `По вопросам: @morenavpnsupport_bot`,
+      `По вопросам: @morenavpnsupport\\_bot`,
       { parse_mode: "MarkdownV2", reply_markup: keyboard }
     );
   }
@@ -1306,7 +1306,7 @@ export function setupBotHandlers(bot: Bot): void {
         `• /menu — Главное меню\n` +
         `• /profile — Личный кабинет\n` +
         `• /help — Помощь\n\n` +
-`По вопросам: @morenavpnsupport_bot`,
+      `По вопросам: @morenavpnsupport\\_bot`,
         { parse_mode: "MarkdownV2" }
       );
       return;
@@ -1424,7 +1424,7 @@ export function setupBotHandlers(bot: Bot): void {
       `• /profile — Личный кабинет\n` +
       `• /manual — Инструкция по настройке\n` +
 `• /help — Эта справка\n\n` +
-      `По вопросам: @morenavpnsupport_bot`,
+      `По вопросам: @morenavpnsupport\\_bot`,
       { parse_mode: "MarkdownV2" }
     );
   });
