@@ -1,8 +1,3 @@
-/**
- * Admin routes для панели управления Morena VPN
- * Читает напрямую из SQLite-базы бота через better-sqlite3
- */
-
 import { Router, type IRouter, type Request, type Response } from "express";
 import Database from "better-sqlite3";
 import path from "node:path";
@@ -21,10 +16,10 @@ import {
   AdjustUserBalanceBody,
   AdjustUserBalanceParams,
 } from "@workspace/api-zod";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-// Путь к базе данных бота — стабильный независимо от того, откуда запущен api-server
 function getWorkspaceRoot(): string {
   const cwd = process.cwd();
   if (cwd.endsWith(path.join("artifacts", "api-server"))) {
@@ -33,15 +28,21 @@ function getWorkspaceRoot(): string {
   return cwd;
 }
 
+const _dbPool = new Map<string, InstanceType<typeof Database>>();
+
 function openDb(): InstanceType<typeof Database> {
   const dbPath = path.resolve(
     getWorkspaceRoot(),
     "artifacts/morena-vpn-bot/prisma/morena.db"
   );
-  return new Database(dbPath, { readonly: false });
+  if (_dbPool.has(dbPath)) {
+    return _dbPool.get(dbPath)!;
+  }
+  const db = new Database(dbPath, { readonly: false });
+  db.pragma("journal_mode = WAL");
+  _dbPool.set(dbPath, db);
+  return db;
 }
-
-// ─── Статистика / дашборд ─────────────────────────────────────────────────────
 
 router.get("/admin/stats", async (_req: Request, res: Response): Promise<void> => {
   const db = openDb();
@@ -54,8 +55,8 @@ router.get("/admin/stats", async (_req: Request, res: Response): Promise<void> =
     const totalUsers = (db.prepare("SELECT COUNT(*) as n FROM User").get() as { n: number }).n;
     const trialUsers = (db.prepare("SELECT COUNT(*) as n FROM User WHERE hasUsedTrial = 1").get() as { n: number }).n;
     const totalRevenue = (db.prepare("SELECT COALESCE(SUM(amount), 0) as s FROM Payment WHERE status = 'paid'").get() as { s: number }).s;
-    const revenueToday = (db.prepare("SELECT COALESCE(SUM(amount), 0) as s FROM Payment WHERE status = 'paid' AND rowid IN (SELECT rowid FROM Payment WHERE rowid > 0)").get() as { s: number }).s;
-    const newUsersToday = (db.prepare("SELECT COUNT(*) as n FROM User").get() as { n: number }).n; // SQLite User has no createdAt
+    const revenueToday = (db.prepare("SELECT COALESCE(SUM(amount), 0) as s FROM Payment WHERE status = 'paid' AND createdAt >= ?").get(todayStart) as { s: number })?.s ?? 0;
+    const newUsersToday = (db.prepare("SELECT COUNT(*) as n FROM User WHERE lastActivityAt >= ?").get(todayStart) as { n: number })?.n ?? 0;
 
     const activeSubscriptions = (
       db.prepare("SELECT COUNT(*) as n FROM Subscription WHERE expiresAt > ?").get(now.toISOString()) as { n: number }
@@ -112,11 +113,11 @@ router.get("/admin/stats", async (_req: Request, res: Response): Promise<void> =
       recentPayments,
     }));
   } finally {
-    db.close();
+    if (!_dbPool.has(path.resolve(getWorkspaceRoot(), "artifacts/morena-vpn-bot/prisma/morena.db"))) {
+      db.close();
+    }
   }
 });
-
-// ─── Список пользователей ─────────────────────────────────────────────────────
 
 router.get("/admin/users", async (req: Request, res: Response): Promise<void> => {
   const parsed = ListAdminUsersQueryParams.safeParse(req.query);
@@ -125,7 +126,8 @@ router.get("/admin/users", async (req: Request, res: Response): Promise<void> =>
     return;
   }
   const { page = 1, limit = 20, search } = parsed.data;
-  const offset = (page - 1) * limit;
+  const cappedLimit = Math.min(limit, 100);
+  const offset = (page - 1) * cappedLimit;
 
   const db = openDb();
   try {
@@ -149,7 +151,7 @@ router.get("/admin/users", async (req: Request, res: Response): Promise<void> =>
       GROUP BY u.id
       ORDER BY u.id DESC
       LIMIT ? OFFSET ?
-    `).all(...params, limit, offset) as Array<{
+    `).all(...params, cappedLimit, offset) as Array<{
       id: bigint | string; username: string | null; balance: number;
       hasUsedTrial: number; referredById: bigint | string | null;
       lastActivityAt: string | null; subscriptionCount: number;
@@ -167,14 +169,14 @@ router.get("/admin/users", async (req: Request, res: Response): Promise<void> =>
       })),
       total,
       page,
-      limit,
+      limit: cappedLimit,
     }));
   } finally {
-    db.close();
+    if (!_dbPool.has(path.resolve(getWorkspaceRoot(), "artifacts/morena-vpn-bot/prisma/morena.db"))) {
+      db.close();
+    }
   }
 });
-
-// ─── Список платежей ─────────────────────────────────────────────────────────
 
 router.get("/admin/payments", async (req: Request, res: Response): Promise<void> => {
   const parsed = ListAdminPaymentsQueryParams.safeParse(req.query);
@@ -183,7 +185,8 @@ router.get("/admin/payments", async (req: Request, res: Response): Promise<void>
     return;
   }
   const { page = 1, limit = 20, status } = parsed.data;
-  const offset = (page - 1) * limit;
+  const cappedLimit = Math.min(limit, 100);
+  const offset = (page - 1) * cappedLimit;
 
   const db = openDb();
   try {
@@ -205,7 +208,7 @@ router.get("/admin/payments", async (req: Request, res: Response): Promise<void>
       ${where}
       ORDER BY p.rowid DESC
       LIMIT ? OFFSET ?
-    `).all(...params, limit, offset) as Array<{
+    `).all(...params, cappedLimit, offset) as Array<{
       id: string; telegramUserId: bigint | string; username: string | null;
       tariffId: string; amount: number; status: string;
     }>;
@@ -221,14 +224,14 @@ router.get("/admin/payments", async (req: Request, res: Response): Promise<void>
       })),
       total,
       page,
-      limit,
+      limit: cappedLimit,
     }));
   } finally {
-    db.close();
+    if (!_dbPool.has(path.resolve(getWorkspaceRoot(), "artifacts/morena-vpn-bot/prisma/morena.db"))) {
+      db.close();
+    }
   }
 });
-
-// ─── Список подписок ─────────────────────────────────────────────────────────
 
 router.get("/admin/subscriptions", async (req: Request, res: Response): Promise<void> => {
   const parsed = ListAdminSubscriptionsQueryParams.safeParse(req.query);
@@ -237,7 +240,8 @@ router.get("/admin/subscriptions", async (req: Request, res: Response): Promise<
     return;
   }
   const { page = 1, limit = 20, active } = parsed.data;
-  const offset = (page - 1) * limit;
+  const cappedLimit = Math.min(limit, 100);
+  const offset = (page - 1) * cappedLimit;
   const now = new Date().toISOString();
 
   const db = openDb();
@@ -263,7 +267,7 @@ router.get("/admin/subscriptions", async (req: Request, res: Response): Promise<
       ${where}
       ORDER BY s.expiresAt DESC
       LIMIT ? OFFSET ?
-    `).all(...params, limit, offset) as Array<{
+    `).all(...params, cappedLimit, offset) as Array<{
       id: string; telegramUserId: bigint | string; username: string | null;
       vpnKey: string; tariffId: string; expiresAt: string;
     }>;
@@ -280,14 +284,14 @@ router.get("/admin/subscriptions", async (req: Request, res: Response): Promise<
       })),
       total,
       page,
-      limit,
+      limit: cappedLimit,
     }));
   } finally {
-    db.close();
+    if (!_dbPool.has(path.resolve(getWorkspaceRoot(), "artifacts/morena-vpn-bot/prisma/morena.db"))) {
+      db.close();
+    }
   }
 });
-
-// ─── Промокоды ───────────────────────────────────────────────────────────────
 
 router.get("/admin/promocodes", async (_req: Request, res: Response): Promise<void> => {
   const db = openDb();
@@ -297,7 +301,9 @@ router.get("/admin/promocodes", async (_req: Request, res: Response): Promise<vo
     }>;
     res.json(ListAdminPromocodesResponse.parse(promos));
   } finally {
-    db.close();
+    if (!_dbPool.has(path.resolve(getWorkspaceRoot(), "artifacts/morena-vpn-bot/prisma/morena.db"))) {
+      db.close();
+    }
   }
 });
 
@@ -309,6 +315,16 @@ router.post("/admin/promocodes", async (req: Request, res: Response): Promise<vo
   }
 
   const { id, bonusAmount, maxUses } = parsed.data;
+
+  if (bonusAmount < 1 || bonusAmount > 100000) {
+    res.status(400).json({ error: "bonusAmount должен быть от 1 до 100000" });
+    return;
+  }
+  if (maxUses < 1 || maxUses > 100000) {
+    res.status(400).json({ error: "maxUses должен быть от 1 до 100000" });
+    return;
+  }
+
   const db = openDb();
   try {
     db.prepare(`
@@ -323,11 +339,11 @@ router.post("/admin/promocodes", async (req: Request, res: Response): Promise<vo
 
     res.status(201).json(CreateAdminPromocodeResponse.parse(promo));
   } finally {
-    db.close();
+    if (!_dbPool.has(path.resolve(getWorkspaceRoot(), "artifacts/morena-vpn-bot/prisma/morena.db"))) {
+      db.close();
+    }
   }
 });
-
-// ─── Корректировка баланса пользователя ───────────────────────────────────────
 
 router.patch("/admin/users/:userId/balance", async (req: Request, res: Response): Promise<void> => {
   const rawId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
@@ -346,12 +362,30 @@ router.patch("/admin/users/:userId/balance", async (req: Request, res: Response)
   const { userId } = paramsRes.data;
   const { delta } = bodyRes.data;
 
+  if (delta < -100000 || delta > 100000) {
+    res.status(400).json({ error: "delta должен быть от -100000 до 100000" });
+    return;
+  }
+
   const db = openDb();
   try {
-    const user = db.prepare("SELECT id FROM User WHERE id = ?").get(userId) as { id: bigint | string } | undefined;
+    const user = db.prepare("SELECT id, balance FROM User WHERE id = ?").get(userId) as { id: bigint | string; balance: number } | undefined;
     if (!user) {
       res.status(404).json({ error: "Пользователь не найден" });
       return;
+    }
+
+    const newBalance = user.balance + delta;
+    if (newBalance < 0) {
+      res.status(400).json({ error: "Баланс не может быть отрицательным" });
+      return;
+    }
+
+    if (delta !== 0) {
+      logger.info(
+        { adminId: req.session.userId, targetUserId: userId, delta, oldBalance: user.balance, newBalance },
+        "Balance adjustment"
+      );
     }
 
     db.prepare("UPDATE User SET balance = balance + ? WHERE id = ?").run(delta, userId);
@@ -377,7 +411,9 @@ router.patch("/admin/users/:userId/balance", async (req: Request, res: Response)
       subscriptionCount: updated.subscriptionCount,
     }));
   } finally {
-    db.close();
+    if (!_dbPool.has(path.resolve(getWorkspaceRoot(), "artifacts/morena-vpn-bot/prisma/morena.db"))) {
+      db.close();
+    }
   }
 });
 

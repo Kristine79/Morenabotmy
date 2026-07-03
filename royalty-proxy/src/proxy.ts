@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import axios, { AxiosError } from "axios";
 import { config } from "./config.js";
 import { resolveTariff, getTariff } from "./tariffs.js";
@@ -15,19 +15,45 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+api.interceptors.response.use(
+  (res) => res,
+  (error: AxiosError) => {
+    if (error.config?.url) {
+      error.config.url = error.config.url.replace(/\/[a-f0-9-]{36}/gi, "/REDACTED");
+    }
+    return Promise.reject(error);
+  }
+);
+
+function requireProxyAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!config.proxyAuthToken) {
+    next();
+    return;
+  }
+  const authHeader = req.headers["authorization"] || req.headers["x-proxy-token"];
+  const auth = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  if (auth !== `Bearer ${config.proxyAuthToken}` && auth !== config.proxyAuthToken) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+
+router.use(requireProxyAuth);
+
 function extractError(err: unknown): string {
   if (err instanceof AxiosError) {
     if (err.response) {
       const data = err.response.data as Record<string, unknown> | string;
-      const detail = typeof data === "object" ? (data.detail ?? JSON.stringify(data)) : data;
-      return `RK API ${err.response.status}: ${detail}`;
+      const detail = typeof data === "object" ? (data.detail ?? "(error)") : "(error)";
+      return `RK API ${err.response.status}`;
     }
-    return err.code ?? err.message;
+    if (err.code === "ECONNABORTED") return "Upstream timeout";
+    if (err.code === "ENOTFOUND") return "DNS error";
+    return "Upstream error";
   }
-  return err instanceof Error ? err.message : String(err);
+  return "Internal error";
 }
-
-// ── GET /rk/balance ──────────────────────────────────────────────────────
 
 router.get("/rk/balance", async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -40,28 +66,39 @@ router.get("/rk/balance", async (_req: Request, res: Response): Promise<void> =>
   }
 });
 
-// ── POST /rk/users ───────────────────────────────────────────────────────
-
 router.post("/rk/users", async (req: Request, res: Response): Promise<void> => {
   try {
     const response = await api.post("/users", req.body ?? {});
     const clean = sanitizeResponse(response.data);
     res.status(201).json(clean);
   } catch (err: unknown) {
-    logger.error({ err, body: req.body }, "POST /users failed");
-    const msg = extractError(err);
-    res.status(502).json({ error: "Ошибка создания пользователя", detail: msg });
+    logger.error({ err }, "POST /users failed");
+    res.status(502).json({ error: "Ошибка создания пользователя" });
   }
 });
 
-// ── POST /rk/users/:uuid/subscription ───────────────────────────────────
-
 router.post("/rk/users/:uuid/subscription", async (req: Request, res: Response): Promise<void> => {
-  const { uuid } = req.params;
+  const uuidParam = req.params.uuid;
+  const uuid = Array.isArray(uuidParam) ? uuidParam[0] : uuidParam;
   const { days, tariff: rawTariff } = req.body as { days?: number; tariff?: string };
 
   if (!days || !rawTariff) {
     res.status(400).json({ error: "Поля days и tariff обязательны" });
+    return;
+  }
+
+  if (typeof days !== "number" || days < 1 || days > 365) {
+    res.status(400).json({ error: "days должен быть от 1 до 365" });
+    return;
+  }
+
+  if (!/^[a-zA-Z0-9_-]+$/.test(rawTariff)) {
+    res.status(400).json({ error: "Недопустимое значение tariff" });
+    return;
+  }
+
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(uuid)) {
+    res.status(400).json({ error: "Неверный формат UUID" });
     return;
   }
 
@@ -70,28 +107,29 @@ router.post("/rk/users/:uuid/subscription", async (req: Request, res: Response):
     const clean = sanitizeResponse(response.data);
     res.json(clean);
   } catch (err: unknown) {
-    logger.error({ err, uuid, days, tariff: rawTariff }, "POST /users/:uuid/subscription failed");
-    const msg = extractError(err);
-    res.status(502).json({ error: "Ошибка создания подписки", detail: msg });
+    logger.error({ err }, "POST /users/:uuid/subscription failed");
+    res.status(502).json({ error: "Ошибка создания подписки" });
   }
 });
 
-// ── GET /rk/users/:uuid ─────────────────────────────────────────────────
-
 router.get("/rk/users/:uuid", async (req: Request, res: Response): Promise<void> => {
-  const { uuid } = req.params;
+  const uuidParam = req.params.uuid;
+  const uuid = Array.isArray(uuidParam) ? uuidParam[0] : uuidParam;
+
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(uuid)) {
+    res.status(400).json({ error: "Неверный формат UUID" });
+    return;
+  }
+
   try {
     const response = await api.get(`/users/${uuid}`);
     const clean = sanitizeResponse(response.data);
     res.json(clean);
   } catch (err: unknown) {
-    logger.error({ err, uuid }, "GET /users/:uuid failed");
-    const msg = extractError(err);
-    res.status(502).json({ error: "Ошибка получения пользователя", detail: msg });
+    logger.error({ err }, "GET /users/:uuid failed");
+    res.status(502).json({ error: "Ошибка получения пользователя" });
   }
 });
-
-// ── GET /rk/users ───────────────────────────────────────────────────────
 
 router.get("/rk/users", async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -100,33 +138,38 @@ router.get("/rk/users", async (_req: Request, res: Response): Promise<void> => {
     res.json(clean);
   } catch (err: unknown) {
     logger.error({ err }, "GET /users failed");
-    const msg = extractError(err);
-    res.status(502).json({ error: "Ошибка списка пользователей", detail: msg });
+    res.status(502).json({ error: "Ошибка списка пользователей" });
   }
 });
 
-// ── DELETE /rk/users/:uuid ──────────────────────────────────────────────
-
 router.delete("/rk/users/:uuid", async (req: Request, res: Response): Promise<void> => {
-  const { uuid } = req.params;
+  const uuidParam = req.params.uuid;
+  const uuid = Array.isArray(uuidParam) ? uuidParam[0] : uuidParam;
+
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(uuid)) {
+    res.status(400).json({ error: "Неверный формат UUID" });
+    return;
+  }
+
   try {
     const response = await api.delete(`/users/${uuid}`);
     const clean = sanitizeResponse(response.data);
     res.json(clean);
   } catch (err: unknown) {
-    logger.error({ err, uuid }, "DELETE /users/:uuid failed");
-    const msg = extractError(err);
-    res.status(502).json({ error: "Ошибка удаления пользователя", detail: msg });
+    logger.error({ err }, "DELETE /users/:uuid failed");
+    res.status(502).json({ error: "Ошибка удаления пользователя" });
   }
 });
-
-// ── POST /rk/subscriptions ──────────────────────────────────────────────
-// Упрощённый эндпоинт: принимает localId и создаёт юзера + подписку
 
 router.post("/rk/subscriptions", async (req: Request, res: Response): Promise<void> => {
   const { tariffId } = req.body as { tariffId?: string };
   if (!tariffId) {
     res.status(400).json({ error: "Поле tariffId обязательно" });
+    return;
+  }
+
+  if (typeof tariffId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(tariffId)) {
+    res.status(400).json({ error: "Недопустимое значение tariffId" });
     return;
   }
 
@@ -156,13 +199,9 @@ router.post("/rk/subscriptions", async (req: Request, res: Response): Promise<vo
     res.status(201).json(clean);
   } catch (err: unknown) {
     logger.error({ err, tariffId }, "POST /rk/subscriptions failed");
-    const msg = extractError(err);
-    res.status(502).json({ error: "Ошибка создания подписки", detail: msg });
+    res.status(502).json({ error: "Ошибка создания подписки" });
   }
 });
-
-// ── GET /rk/plans ───────────────────────────────────────────────────────
-// Возвращает список тарифов — без упоминания RoyaltyKey
 
 router.get("/rk/plans", async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -181,8 +220,7 @@ router.get("/rk/plans", async (_req: Request, res: Response): Promise<void> => {
     res.json(sanitizeResponse(plans));
   } catch (err: unknown) {
     logger.error({ err }, "GET /rk/plans failed");
-    const msg = extractError(err);
-    res.status(502).json({ error: "Ошибка получения тарифов", detail: msg });
+    res.status(502).json({ error: "Ошибка получения тарифов" });
   }
 });
 

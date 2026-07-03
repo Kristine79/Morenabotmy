@@ -41,6 +41,12 @@ testem.log
 .DS_Store
 Thumbs.db
 
+# Environment variables (gitignored both at root and in subdirectories)
+.env
+.env.local
+.env.*.local
+artifacts/**/.env
+
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 

@@ -1,7 +1,3 @@
-/**
- * Reseller routes — прямое управление подписками через RoyaltyKey API
- */
-
 import { Router, type IRouter, type Request, type Response } from "express";
 import axios from "axios";
 import Database from "better-sqlite3";
@@ -14,19 +10,13 @@ import {
   RenewSubscriptionResponse,
   DeleteSubscriptionResponse,
 } from "@workspace/api-zod";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
 const ROYALTYKEY_BASE = "https://royaltykey.com/api/v1";
 
-function getHeaders() {
-  const token = process.env.ROYALTYKEY_API_KEY;
-  if (!token) throw new Error("ROYALTYKEY_API_KEY не задан");
-  return {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  };
-}
+const _dbPool = new Map<string, InstanceType<typeof Database>>();
 
 function getWorkspaceRoot(): string {
   const cwd = process.cwd();
@@ -41,10 +31,35 @@ function openDb(): InstanceType<typeof Database> {
     getWorkspaceRoot(),
     "artifacts/morena-vpn-bot/prisma/morena.db"
   );
-  return new Database(dbPath, { readonly: false });
+  if (_dbPool.has(dbPath)) {
+    return _dbPool.get(dbPath)!;
+  }
+  const db = new Database(dbPath, { readonly: false });
+  db.pragma("journal_mode = WAL");
+  _dbPool.set(dbPath, db);
+  return db;
 }
 
-// ─── GET /admin/reseller/profile ─────────────────────────────────────────────
+function getApiHeaders() {
+  const token = process.env.ROYALTYKEY_API_KEY;
+  if (!token) throw new Error("ROYALTYKEY_API_KEY не задан");
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+}
+
+function closeDb(): void {
+  const dbPath = path.resolve(
+    getWorkspaceRoot(),
+    "artifacts/morena-vpn-bot/prisma/morena.db"
+  );
+  const db = _dbPool.get(dbPath);
+  if (db) {
+    db.close();
+    _dbPool.delete(dbPath);
+  }
+}
 
 router.get("/admin/reseller/profile", async (req: Request, res: Response): Promise<void> => {
   try {
@@ -62,8 +77,6 @@ router.get("/admin/reseller/profile", async (req: Request, res: Response): Promi
   }
 });
 
-// ─── POST /admin/reseller/clients ────────────────────────────────────────────
-
 router.post("/admin/reseller/clients", async (req: Request, res: Response): Promise<void> => {
   const parsed = CreateResellerClientBody.safeParse(req.body);
   if (!parsed.success) {
@@ -76,7 +89,7 @@ router.post("/admin/reseller/clients", async (req: Request, res: Response): Prom
     const response = await axios.post(
       `${ROYALTYKEY_BASE}/users`,
       { tariff_id: tariffId, external_id: label ?? `admin_${Date.now()}` },
-      { headers: getHeaders() }
+      { headers: getApiHeaders() }
     );
     const user = response.data as { id: string; vpn_key: string; expires_at: string; tariff_id: string };
     res.status(201).json(CreateResellerClientResponse.parse({
@@ -90,8 +103,6 @@ router.post("/admin/reseller/clients", async (req: Request, res: Response): Prom
     res.status(502).json({ error: "Ошибка создания клиента в RoyaltyKey API" });
   }
 });
-
-// ─── POST /admin/subscriptions/:id/renew ─────────────────────────────────────
 
 router.post("/admin/subscriptions/:id/renew", async (req: Request, res: Response): Promise<void> => {
   const subId = req.params.id as string;
@@ -113,11 +124,10 @@ router.post("/admin/subscriptions/:id/renew", async (req: Request, res: Response
     const response = await axios.post(
       `${ROYALTYKEY_BASE}/users/${subId}/renew`,
       { tariff_id: tariffId },
-      { headers: getHeaders() }
+      { headers: getApiHeaders() }
     );
     const user = response.data as { id: string; vpn_key: string; expires_at: string; tariff_id: string };
 
-    // Обновляем дату в нашей БД
     db.prepare("UPDATE Subscription SET expiresAt = ?, tariffId = ? WHERE id = ?")
       .run(user.expires_at, user.tariff_id, subId);
 
@@ -131,11 +141,15 @@ router.post("/admin/subscriptions/:id/renew", async (req: Request, res: Response
     req.log.error({ err }, "RoyaltyKey renewSubscription failed");
     res.status(502).json({ error: "Ошибка продления в RoyaltyKey API" });
   } finally {
-    db.close();
+    const dbPath = path.resolve(
+      getWorkspaceRoot(),
+      "artifacts/morena-vpn-bot/prisma/morena.db"
+    );
+    if (!_dbPool.has(dbPath)) {
+      db.close();
+    }
   }
 });
-
-// ─── DELETE /admin/subscriptions/:id ─────────────────────────────────────────
 
 router.delete("/admin/subscriptions/:id", async (req: Request, res: Response): Promise<void> => {
   const subId = req.params.id as string;
@@ -148,21 +162,25 @@ router.delete("/admin/subscriptions/:id", async (req: Request, res: Response): P
       return;
     }
 
-    // Деактивируем в RoyaltyKey
     try {
       await axios.delete(`${ROYALTYKEY_BASE}/users/${subId}`, {
-        headers: getHeaders(),
+        headers: getApiHeaders(),
       });
     } catch (err: unknown) {
       req.log.warn({ err }, "RoyaltyKey deleteUser failed — removing from local DB anyway");
     }
 
-    // Удаляем из нашей БД
     db.prepare("DELETE FROM Subscription WHERE id = ?").run(subId);
 
     res.json(DeleteSubscriptionResponse.parse({ ok: true }));
   } finally {
-    db.close();
+    const dbPath = path.resolve(
+      getWorkspaceRoot(),
+      "artifacts/morena-vpn-bot/prisma/morena.db"
+    );
+    if (!_dbPool.has(dbPath)) {
+      db.close();
+    }
   }
 });
 

@@ -4,21 +4,40 @@ import pinoHttp from "pino-http";
 import session from "express-session";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { rateLimiter } from "./middleware/rateLimit";
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) {
   throw new Error("SESSION_SECRET не задан в переменных окружения");
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? "http://localhost:5173").split(",").filter(Boolean);
+
 const app: Express = express();
 
-// Raw body capture for Telegram webhook verification
-// Telegram requires raw body for cryptographic signature verification
-app.use("/api/bot/webhook", express.raw({ type: "application/json" }));
+app.set("trust proxy", 1);
+
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "0");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Powered-By", "");
+  res.removeHeader("X-Powered-By");
+  if (isProduction) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'");
+  }
+  next();
+});
+
+app.use("/api", rateLimiter);
 
 app.use(
   pinoHttp({
     logger,
+    autoLogging: isProduction ? { ignore: (req) => req.url === "/api/healthz" } : false,
     serializers: {
       req(req) {
         return {
@@ -44,19 +63,20 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 дней
+      secure: isProduction,
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   }),
 );
 
 app.use(cors({
-  origin: true,
+  origin: isProduction ? ALLOWED_ORIGINS : true,
   credentials: true,
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 app.use("/api", router);
 

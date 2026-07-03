@@ -1,8 +1,3 @@
-/**
- * Auth routes — аутентификация через Telegram Login Widget
- * Верификация hash (HMAC-SHA256 на основе BOT_TOKEN) + проверка ADMIN_TELEGRAM_ID
- */
-
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "node:crypto";
 import {
@@ -12,14 +7,11 @@ import {
   GetAuthMeResponse,
   LogoutResponse,
 } from "@workspace/api-zod";
+import { authRateLimiter } from "../middleware/rateLimit";
 import "../types/session.d.ts";
 
 const router: IRouter = Router();
 
-/**
- * Проверяет подпись данных Telegram Login Widget
- * https://core.telegram.org/widgets/login#checking-authorization
- */
 function verifyTelegramHash(data: Record<string, string>, botToken: string): boolean {
   const { hash, ...rest } = data;
   if (!hash) return false;
@@ -32,19 +24,22 @@ function verifyTelegramHash(data: Record<string, string>, botToken: string): boo
   const secretKey = crypto.createHash("sha256").update(botToken).digest();
   const expectedHash = crypto.createHmac("sha256", secretKey).update(checkString).digest("hex");
 
+  if (typeof crypto.timingSafeEqual === "function") {
+    const buf1 = Buffer.from(expectedHash);
+    const buf2 = Buffer.from(hash);
+    if (buf1.length !== buf2.length) return false;
+    return crypto.timingSafeEqual(buf1, buf2);
+  }
+
   return expectedHash === hash;
 }
-
-// ─── GET /auth/config ─────────────────────────────────────────────────────────
 
 router.get("/auth/config", (_req: Request, res: Response): void => {
   const botUsername = process.env.BOT_USERNAME ?? "morenavpn_bot";
   res.json(GetAuthConfigResponse.parse({ botUsername }));
 });
 
-// ─── POST /auth/login ─────────────────────────────────────────────────────────
-
-router.post("/auth/login", (req: Request, res: Response): void => {
+router.post("/auth/login", authRateLimiter, (req: Request, res: Response): void => {
   const parsed = TelegramLoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Неверные данные" });
@@ -60,7 +55,6 @@ router.post("/auth/login", (req: Request, res: Response): void => {
   if (!adminIdStr) { res.status(500).json({ error: "Сервер не настроен" }); return; }
   const adminId = Number(adminIdStr);
 
-  // Преобразуем данные в строки для проверки hash
   const dataForVerify: Record<string, string> = {};
   for (const [k, v] of Object.entries(authData)) {
     if (v !== undefined && v !== null) {
@@ -68,22 +62,19 @@ router.post("/auth/login", (req: Request, res: Response): void => {
     }
   }
 
-  // Проверяем подпись Telegram
   if (!verifyTelegramHash(dataForVerify, botToken)) {
     res.status(401).json({ error: "Неверная подпись данных Telegram" });
     return;
   }
 
-  // auth_date не должен быть старше суток
   const now = Math.floor(Date.now() / 1000);
   if (now - authData.auth_date > 86400) {
     res.status(401).json({ error: "Данные авторизации устарели" });
     return;
   }
 
-  // Только ADMIN
   if (authData.id !== adminId) {
-    res.status(403).json({ error: "Доступ запрещён: вы не являетесь администратором" });
+    res.status(403).json({ error: "Доступ запрещён" });
     return;
   }
 
@@ -99,8 +90,6 @@ router.post("/auth/login", (req: Request, res: Response): void => {
   }));
 });
 
-// ─── GET /auth/me ─────────────────────────────────────────────────────────────
-
 router.get("/auth/me", (req: Request, res: Response): void => {
   if (!req.session.userId) {
     res.status(401).json({ error: "Не авторизован" });
@@ -114,35 +103,11 @@ router.get("/auth/me", (req: Request, res: Response): void => {
   }));
 });
 
-// ─── POST /auth/logout ────────────────────────────────────────────────────────
-
 router.post("/auth/logout", (req: Request, res: Response): void => {
   req.session.destroy(() => {
     res.clearCookie("morena_admin_sid");
     res.json(LogoutResponse.parse({ ok: true }));
   });
-});
-
-// ─── POST /auth/dev-login (только для разработки) ──────────────────────────────
-
-router.post("/auth/dev-login", (req: Request, res: Response): void => {
-  if (process.env.NODE_ENV !== "development") {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
-
-  const adminId = req.body?.id ? Number(req.body.id) : Number(process.env.ADMIN_TELEGRAM_ID ?? 0);
-  if (!adminId) { res.status(400).json({ error: "Telegram ID не указан" }); return; }
-
-  req.session.userId = adminId;
-  req.session.firstName = "Dev";
-  req.session.username = "admin";
-
-  res.json(TelegramLoginResponse.parse({
-    id: adminId,
-    firstName: "Dev",
-    username: "admin",
-  }));
 });
 
 export default router;
