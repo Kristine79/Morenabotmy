@@ -1144,6 +1144,7 @@ export function setupBotHandlers(bot: Bot): void {
       .text("⚔️ Распутать бурелом (Сбой)", "faq_vpn").row()
       .text("💰 Обменять золото (Оплата)", "faq_payment").row()
       .text("🔮 Призыв волхва (Поддержка)", "support").row()
+      .text("📜 Документация", "docs").row()
       .text("↩️ Вернуться в чащу", "menu");
 
     await ctx.reply(text, {
@@ -1189,6 +1190,20 @@ export function setupBotHandlers(bot: Bot): void {
     );
   });
 
+  bot.callbackQuery("docs", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.reply(
+      `📜 *Документация Morena VPN*`,
+      {
+        parse_mode: "MarkdownV2",
+        reply_markup: new InlineKeyboard()
+          .url("📋 Пользовательское соглашение", "https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19").row()
+          .url("📄 Политика конфиденциальности", "https://telegra.ph/Politika-konfidencialnosti-06-21-31").row()
+          .text("↩️ Вернуться в чащу", "help"),
+      }
+    );
+  });
+
   bot.callbackQuery("useful_bots", async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.reply(
@@ -1224,6 +1239,8 @@ export function setupBotHandlers(bot: Bot): void {
       .url("📥 Скачать для macOS", "https://github.com/hiddify/hiddify-app/releases/latest")
       .row()
       .url("📖 Полная инструкция на сайте", "https://autoconnect-chi.vercel.app")
+      .row()
+      .url("📱 Альтернатива", "https://teletype.in/@marksteal76/QXkpHJ7Z6DH")
       .row()
       .text("◀️ В меню", "menu");
 
