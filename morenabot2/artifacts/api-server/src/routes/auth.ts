@@ -103,6 +103,29 @@ router.get("/auth/me", (req: Request, res: Response): void => {
   }));
 });
 
+router.post("/auth/dev-login", (req: Request, res: Response): void => {
+  const { id } = req.body as { id?: number };
+  if (!id) {
+    res.status(400).json({ error: "ID не указан" });
+    return;
+  }
+
+  const adminIdStr = process.env.ADMIN_TELEGRAM_ID;
+  if (!adminIdStr) { res.status(500).json({ error: "Сервер не настроен" }); return; }
+  const adminId = Number(adminIdStr);
+
+  if (id !== adminId) {
+    res.status(403).json({ error: "Доступ запрещён" });
+    return;
+  }
+
+  req.session.userId = id;
+  req.session.firstName = "Admin";
+  req.session.username = undefined;
+
+  res.json(TelegramLoginResponse.parse({ id, firstName: "Admin" }));
+});
+
 router.post("/auth/logout", (req: Request, res: Response): void => {
   req.session.destroy(() => {
     res.clearCookie("morena_admin_sid");
