@@ -111,12 +111,12 @@ router.post("/auth/dev-login", (req: Request, res: Response): void => {
   }
 
   const adminIdStr = process.env.ADMIN_TELEGRAM_ID;
-  if (!adminIdStr) { res.status(500).json({ error: "Сервер не настроен" }); return; }
-  const adminId = Number(adminIdStr);
-
-  if (id !== adminId) {
-    res.status(403).json({ error: "Доступ запрещён" });
-    return;
+  if (adminIdStr) {
+    const adminId = Number(adminIdStr);
+    if (id !== adminId) {
+      res.status(403).json({ error: "Доступ запрещён" });
+      return;
+    }
   }
 
   req.session.userId = id;
