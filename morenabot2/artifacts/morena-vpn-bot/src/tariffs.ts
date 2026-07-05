@@ -130,8 +130,8 @@ export interface ExtraTrafficPackage {
 }
 
 export const EXTRA_TRAFFIC_PACKAGES: ExtraTrafficPackage[] = [
-  { gb: 10, label: "📦 10 ГБ",  priceRub: 49 },
-  { gb: 20, label: "📦 20 ГБ",  priceRub: 69 },
-  { gb: 30, label: "📦 30 ГБ",  priceRub: 89 },
-  { gb: 50, label: "📦 50 ГБ",  priceRub: 129 },
+  { gb: 10, label: "📦 10 ГБ",  priceRub: 69 },
+  { gb: 20, label: "📦 20 ГБ",  priceRub: 89 },
+  { gb: 30, label: "📦 30 ГБ",  priceRub: 109 },
+  { gb: 50, label: "📦 50 ГБ",  priceRub: 149 },
 ];
