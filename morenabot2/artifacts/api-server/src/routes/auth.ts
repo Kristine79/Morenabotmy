@@ -103,6 +103,31 @@ router.get("/auth/me", (req: Request, res: Response): void => {
   }));
 });
 
+router.post("/auth/password-login", (req: Request, res: Response): void => {
+  const { password } = req.body as { password?: string };
+  if (!password) {
+    res.status(400).json({ error: "Пароль не указан" });
+    return;
+  }
+
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    res.status(500).json({ error: "Сервер не настроен" });
+    return;
+  }
+
+  if (password !== adminPassword) {
+    res.status(403).json({ error: "Неверный пароль" });
+    return;
+  }
+
+  req.session.userId = 1;
+  req.session.firstName = "Admin";
+  req.session.username = undefined;
+
+  res.json(TelegramLoginResponse.parse({ id: 1, firstName: "Admin" }));
+});
+
 router.post("/auth/dev-login", (req: Request, res: Response): void => {
   const { id } = req.body as { id?: number };
   if (!id) {
