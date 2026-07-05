@@ -96,7 +96,7 @@ app.use("/api", router);
 if (fs.existsSync(ADMIN_PANEL_DIR)) {
   logger.info("Admin panel found, mounting at /admin/");
   app.use("/admin", express.static(ADMIN_PANEL_DIR));
-  app.get("/admin/*", (_req, res) => {
+  app.get("/admin/:path(.*)", (_req, res) => {
     res.sendFile(path.join(ADMIN_PANEL_DIR, "index.html"));
   });
 }
