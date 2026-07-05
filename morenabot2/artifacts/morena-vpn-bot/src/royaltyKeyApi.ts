@@ -110,7 +110,11 @@ export class RoyaltyKeyApi {
   }
 
   async createUser(): Promise<RoyaltyKeyUser> {
-    return this.request<RoyaltyKeyUser>("post", "/users");
+    const user = await this.request<RoyaltyKeyUser>("post", "/users");
+    return {
+      ...user,
+      subscription_url: user.subscription_url.replace(/w\.royaltykey\.ru/gi, "morenagate.pro"),
+    };
   }
 
   async addSubscription(

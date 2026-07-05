@@ -3,6 +3,7 @@ const BRAND_PATTERNS = [
   /royaltykey/gi,
   /royalty\.key/gi,
   /api\.royaltykey\.ru/gi,
+  /w\.royaltykey\.ru/gi,
   /royaltykey\.(ru|com|io|net|org)/gi,
 ];
 
