@@ -879,30 +879,69 @@ export function setupBotHandlers(bot: Bot): void {
       return;
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    const bonus = user?.balance ?? 0;
+    const text =
+      `🔄 *Продление подписки*\n\n` +
+      `🌟 *Тариф — Классик*\n` +
+      `Скоростные сервера 10 Гбит, без ограничений и лимитов\\.\n\n` +
+      `🌌 *Тариф — Цифровой камуфляж*\n` +
+      `Специализированные серверы с технологией цифрового камуфляжа, гарантирующие стабильный доступ к важным ресурсам в любом регионе\\.\n\n` +
+      `Выберите желаемый тариф:`;
 
-    const keyboard = new InlineKeyboard();
-    for (const tariff of TARIFFS) {
-      const finalPrice = Math.max(0, tariff.priceRub - bonus);
-      keyboard
-        .text(
-          `${tariff.label} — ${finalPrice} ₽`,
-          `renew_pay:${subId}:${tariff.id}`
-        )
-        .row();
-    }
-    keyboard.text("◀️ Назад", "profile");
+    const keyboard = new InlineKeyboard()
+      .text("🌟 Классик", `renew_type:${subId}:classic`).row()
+      .text("🌌 Цифровой камуфляж", `renew_type:${subId}:obhod`).row()
+      .text("◀️ Назад", "profile");
 
-    await ctx.reply(
-      `🔄 *Продление подписки*\n\nВыберите тариф:`,
-      { parse_mode: "MarkdownV2", reply_markup: keyboard }
-    );
+    await ctx.reply(text, {
+      parse_mode: "MarkdownV2",
+      reply_markup: keyboard,
+    });
   }
 
   bot.callbackQuery(/^renew_sub:(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     await showRenewalOptions(ctx, ctx.match[1]);
+  });
+
+  bot.callbackQuery(/^renew_type:([^:]+):(classic|obhod)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const subId = ctx.match[1];
+    const type = ctx.match[2];
+    const userId = BigInt(ctx.from.id);
+
+    const sub = await prisma.subscription.findUnique({ where: { id: subId } });
+    if (!sub || sub.telegramUserId !== userId) {
+      await ctx.reply("❌ Подписка не найдена.");
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const bonus = user?.balance ?? 0;
+
+    const tariffs = type === "classic" ? CLASSIC_TARIFFS : OBHOD_TARIFFS;
+    const label = type === "classic" ? "🌟 Классик" : "🌌 Цифровой камуфляж";
+
+    const keyboard = new InlineKeyboard();
+    for (const tariff of tariffs) {
+      const finalPrice = Math.max(0, tariff.priceRub - bonus);
+      const usdtPrice = (finalPrice / USDT_RUB_RATE).toFixed(2);
+      const priceText =
+        bonus > 0
+          ? `${tariff.label} — ${usdtPrice} USDT (скидка ${Math.min(bonus, tariff.priceRub)} ₽)`
+          : `${tariff.label}`;
+      keyboard.text(priceText, `renew_pay:${subId}:${tariff.id}`).row();
+    }
+    keyboard.text("◀️ Назад", `renew_sub:${subId}`);
+
+    const bonusText =
+      bonus > 0
+        ? escapeMarkdown(`\n\n💰 У вас ${bonus} ₽ бонуса — скидка применена автоматически.`)
+        : "";
+
+    await ctx.reply(`*${label}*\n\n⚡ Выберите тариф:${bonusText}`, {
+      parse_mode: "MarkdownV2",
+      reply_markup: keyboard,
+    });
   });
 
   bot.callbackQuery(/^renew_pay:([^:]+):(.+)$/, async (ctx) => {
@@ -917,7 +956,7 @@ export function setupBotHandlers(bot: Bot): void {
       .text("⚡ CryptoBot (USDT)", `renew_crypto:${subId}:${tariffId}`).row()
       .text("⭐ Telegram Stars", `renew_stars:${subId}:${tariffId}`).row()
       .text("💳 Картой", `renew_card:${subId}:${tariffId}`).row()
-      .text("◀️ Назад", "profile");
+      .text("◀️ Назад", `renew_sub:${subId}`);
 
     await ctx.reply(
       `🔄 *Продление подписки*\n📦 *${escapeMarkdown(tariff.label)}*\n\nВыберите способ оплаты:`,
