@@ -17,7 +17,7 @@ import QRCode from "qrcode";
 import { prisma } from "./db.js";
 import { royaltyKey } from "./royaltyKeyApi.js";
 import { cryptoBot, USDT_RUB_RATE } from "./cryptoBotApi.js";
-import { CLASSIC_TARIFFS, OBHOD_TARIFFS, TARIFFS, TRIAL_TARIFF_ID, TRIAL_DURATION_DAYS, TRIAL_API_TARIFF, TRIAL_API_DAYS, REFERRAL_BONUS } from "./tariffs.js";
+import { CLASSIC_TARIFFS, OBHOD_TARIFFS, TARIFFS, TRIAL_TARIFF_ID, TRIAL_DURATION_DAYS, TRIAL_API_TARIFF, TRIAL_API_DAYS, REFERRAL_BONUS, EXTRA_TRAFFIC_PACKAGES } from "./tariffs.js";
 import { escapeMarkdown, formatVpnKey, formatDate, subStatus } from "./helpers.js";
 
 export function setupBotHandlers(bot: Bot): void {
@@ -843,10 +843,15 @@ export function setupBotHandlers(bot: Bot): void {
       subs.forEach((sub, i) => {
         const status = subStatus(sub);
         const expiry = escapeMarkdown(formatDate(new Date(sub.expiresAt)));
+        const isObhod = sub.tariffId.startsWith("obhod_");
         profileText +=
-          `${i + 1}\\. ${status}\n` +
-          `   📅 До: ${expiry}\n\n`;
+          `${i + 1}\\. ${status}` +
+          (isObhod ? " 🌌" : "") +
+          `\n   📅 До: ${expiry}\n\n`;
         keyboard.text(`🔄 Продлить #${i + 1}`, `renew_sub:${sub.id}`).row();
+        if (isObhod && subStatus(sub) === "🟢 Активна") {
+          keyboard.text(`📡 Трафик #${i + 1}`, `buy_traffic:${sub.id}`).row();
+        }
       });
     }
 
@@ -1126,6 +1131,72 @@ export function setupBotHandlers(bot: Bot): void {
     }
   }
 
+  bot.callbackQuery(/^buy_traffic:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const subId = ctx.match[1];
+    const userId = BigInt(ctx.from.id);
+
+    const sub = await prisma.subscription.findUnique({ where: { id: subId } });
+    if (!sub || sub.telegramUserId !== userId) {
+      await ctx.reply("❌ Подписка не найдена.");
+      return;
+    }
+
+    const keyboard = new InlineKeyboard();
+    for (const pkg of EXTRA_TRAFFIC_PACKAGES) {
+      keyboard.text(`${pkg.label} — ${pkg.priceRub} ₽`, `traffic_buy:${subId}:${pkg.gb}`).row();
+    }
+    keyboard.text("◀️ Назад", "profile");
+
+    await ctx.reply(
+      `📡 *Дополнительный трафик*\n\n` +
+      `Выберите пакет дополнительного трафика для вашей LTE подписки:\n\n` +
+      `📦 Доступные пакеты:`,
+      { parse_mode: "MarkdownV2", reply_markup: keyboard }
+    );
+  });
+
+  bot.callbackQuery(/^traffic_buy:([^:]+):(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const subId = ctx.match[1];
+    const gb = parseInt(ctx.match[2]);
+    const userId = BigInt(ctx.from.id);
+
+    const pkg = EXTRA_TRAFFIC_PACKAGES.find((p) => p.gb === gb);
+    if (!pkg) {
+      await ctx.reply("❌ Пакет не найден.");
+      return;
+    }
+
+    const sub = await prisma.subscription.findUnique({ where: { id: subId } });
+    if (!sub || sub.telegramUserId !== userId) {
+      await ctx.reply("❌ Подписка не найдена.");
+      return;
+    }
+
+    await ctx.reply("⏳ Покупаем дополнительный трафик...");
+
+    try {
+      const result = await royaltyKey.buyTraffic(sub.id, gb);
+      await ctx.reply(
+        `✅ *Дополнительный трафик активирован\\!*\n\n` +
+        `📦 Пакет: *${escapeMarkdown(pkg.label)}*\n` +
+        `💰 Сумма: *${escapeMarkdown(pkg.priceRub.toString())} ₽*`,
+        { parse_mode: "MarkdownV2", reply_markup: new InlineKeyboard().text("◀️ В профиль", "profile") }
+      );
+    } catch (err) {
+      console.error("[buy_traffic] Ошибка:", err);
+      const errMsg = err instanceof Error ? err.message : "Неизвестная ошибка";
+      if (errMsg.includes("402")) {
+        await ctx.reply("❌ Недостаточно средств на балансе API ключа.");
+      } else if (errMsg.includes("400")) {
+        await ctx.reply("❌ Неверный пакет или подписка не активна.");
+      } else {
+        await ctx.reply("❌ Не удалось купить трафик. Попробуйте позже.");
+      }
+    }
+  });
+
   bot.callbackQuery("help", async (ctx) => {
     await ctx.answerCallbackQuery();
     const text =
@@ -1320,8 +1391,12 @@ export function setupBotHandlers(bot: Bot): void {
         subs.forEach((sub, i) => {
           const status = subStatus(sub);
           const expiry = escapeMarkdown(formatDate(new Date(sub.expiresAt)));
-          profileText += `${i + 1}\\. ${status}\n   📅 До: ${expiry}\n\n`;
+          const isObhod = sub.tariffId.startsWith("obhod_");
+          profileText += `${i + 1}\\. ${status}` + (isObhod ? " 🌌" : "") + `\n   📅 До: ${expiry}\n\n`;
           keyboard.text(`🔄 Продлить #${i + 1}`, `renew_sub:${sub.id}`).row();
+          if (isObhod && subStatus(sub) === "🟢 Активна") {
+            keyboard.text(`📡 Трафик #${i + 1}`, `buy_traffic:${sub.id}`).row();
+          }
         });
       }
       keyboard.text("◀️ В меню", "menu");

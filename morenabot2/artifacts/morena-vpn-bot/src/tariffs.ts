@@ -121,3 +121,17 @@ export const TRIAL_API_DAYS = 1;
 
 // Реферальный бонус в рублях
 export const REFERRAL_BONUS = 50;
+
+// Дополнительные пакеты трафика (только для LTE)
+export interface ExtraTrafficPackage {
+  gb: number;
+  label: string;
+  priceRub: number;
+}
+
+export const EXTRA_TRAFFIC_PACKAGES: ExtraTrafficPackage[] = [
+  { gb: 10, label: "📦 10 ГБ",  priceRub: 49 },
+  { gb: 20, label: "📦 20 ГБ",  priceRub: 69 },
+  { gb: 30, label: "📦 30 ГБ",  priceRub: 89 },
+  { gb: 50, label: "📦 50 ГБ",  priceRub: 129 },
+];

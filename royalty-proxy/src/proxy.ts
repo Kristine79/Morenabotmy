@@ -203,6 +203,31 @@ router.post("/rk/subscriptions", async (req: Request, res: Response): Promise<vo
   }
 });
 
+router.post("/rk/users/:uuid/buy-traffic", async (req: Request, res: Response): Promise<void> => {
+  const uuidParam = req.params.uuid;
+  const uuid = Array.isArray(uuidParam) ? uuidParam[0] : uuidParam;
+  const gb = parseInt(req.query.gb as string);
+
+  if (![10, 20, 30, 50].includes(gb)) {
+    res.status(400).json({ error: "Неверный размер пакета. Допустимо: 10, 20, 30, 50" });
+    return;
+  }
+
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(uuid)) {
+    res.status(400).json({ error: "Неверный формат UUID" });
+    return;
+  }
+
+  try {
+    const response = await api.post(`/users/${uuid}/buy-traffic?gb=${gb}`);
+    const clean = sanitizeResponse(response.data);
+    res.json(clean);
+  } catch (err: unknown) {
+    logger.error({ err }, "POST /rk/users/:uuid/buy-traffic failed");
+    res.status(502).json({ error: "Ошибка покупки трафика" });
+  }
+});
+
 router.get("/rk/plans", async (_req: Request, res: Response): Promise<void> => {
   try {
     const response = await api.get("/balance");

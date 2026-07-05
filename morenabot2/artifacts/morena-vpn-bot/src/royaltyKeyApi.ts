@@ -136,6 +136,10 @@ export class RoyaltyKeyApi {
   async getBalance(): Promise<RoyaltyKeyBalance> {
     return this.request<RoyaltyKeyBalance>("get", "/balance");
   }
+
+  async buyTraffic(vpnUuid: string, gb: number): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>("post", `/users/${vpnUuid}/buy-traffic?gb=${gb}`);
+  }
 }
 
 export const royaltyKey = new RoyaltyKeyApi();
