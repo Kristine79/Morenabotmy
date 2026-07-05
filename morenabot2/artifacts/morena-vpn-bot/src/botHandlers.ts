@@ -1459,4 +1459,18 @@ export function setupBotHandlers(bot: Bot): void {
       { parse_mode: "MarkdownV2" }
     );
   });
+
+  bot.command("docs", async (ctx) => {
+    await ctx.reply(
+      `📖 *Документация Morena VPN*\n\n` +
+      `• 📄 [Пользовательское соглашение](https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19)\n` +
+      `• 🔏 [Политика конфиденциальности](https://telegra.ph/Politika-konfidencialnosti-06-21-31)\n` +
+      `• 📱 [Инструкция по настройке](https://teletype.in/@marksteal76/QXkpHJ7Z6DH)\n\n` +
+      `По всем вопросам: @morenavpnsupport\\_bot`,
+      {
+        parse_mode: "MarkdownV2",
+        disable_web_page_preview: true,
+      }
+    );
+  });
 }

@@ -10,13 +10,9 @@ import { bot } from "./botInstance.js";
 import { cryptoBot } from "./cryptoBotApi.js";
 import { startCronJobs } from "./cron.js";
 
-async function registerMenuCommands(): Promise<void> {
+async function setupMenuCommands(): Promise<void> {
   const commands = [
-    { command: "start", description: "🚀 Запустить бота" },
-    { command: "menu", description: "📋 Главное меню" },
-    { command: "profile", description: "👤 Личный кабинет" },
-    { command: "help", description: "❓ Помощь" },
-    { command: "manual", description: "📖 Инструкция по настройке" },
+    { command: "docs", description: "📖 Документация и инструкция" },
   ];
 
   try {
@@ -30,8 +26,8 @@ async function registerMenuCommands(): Promise<void> {
 async function main(): Promise<void> {
   console.log("🌙 Morena VPN Bot стартует...");
 
-  // Регистрируем команды меню (Bot Menu Button)
-  await registerMenuCommands();
+  // Регистрируем команды меню
+  await setupMenuCommands();
 
   // Запускаем CRON-задачи уведомлений
   startCronJobs(bot);
