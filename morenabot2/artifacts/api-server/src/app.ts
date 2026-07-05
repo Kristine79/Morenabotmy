@@ -2,9 +2,21 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
+import path from "node:path";
+import fs from "node:fs";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { rateLimiter } from "./middleware/rateLimit";
+
+function findWorkspaceRoot(): string {
+  const cwd = process.cwd();
+  if (cwd.endsWith(path.join("artifacts", "api-server"))) return path.resolve(cwd, "../..");
+  if (fs.existsSync(path.join(cwd, "pnpm-workspace.yaml"))) return cwd;
+  return cwd;
+}
+
+const WORKSPACE_ROOT = findWorkspaceRoot();
+const ADMIN_PANEL_DIR = path.resolve(WORKSPACE_ROOT, "artifacts/admin-panel/dist/public");
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) {
@@ -79,5 +91,14 @@ app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 app.use("/api", router);
+
+// Serve admin panel (only accessible via SSH tunnel or localhost)
+if (fs.existsSync(ADMIN_PANEL_DIR)) {
+  logger.info("Admin panel found, mounting at /admin/");
+  app.use("/admin", express.static(ADMIN_PANEL_DIR));
+  app.get("/admin/*", (_req, res) => {
+    res.sendFile(path.join(ADMIN_PANEL_DIR, "index.html"));
+  });
+}
 
 export default app;
