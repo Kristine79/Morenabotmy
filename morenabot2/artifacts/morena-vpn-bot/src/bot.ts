@@ -27,6 +27,13 @@ async function setupMenuCommands(): Promise<void> {
 async function main(): Promise<void> {
   console.log("🌙 Morena VPN Bot стартует...");
 
+  // Сбрасываем webhook перед запуском (убирает конфликт 409 с другим long polling)
+  try {
+    await bot.api.deleteWebhook({ drop_pending_updates: true });
+  } catch (err) {
+    console.error("[bot] Ошибка сброса webhook:", err);
+  }
+
   // Регистрируем команды меню
   await setupMenuCommands();
 
@@ -78,6 +85,18 @@ async function main(): Promise<void> {
     await new Promise(() => {});
   }
 }
+
+// Graceful shutdown
+process.on("SIGINT", async () => {
+  console.log("\n🛑 Остановка бота...");
+  await bot.stop();
+  process.exit(0);
+});
+process.on("SIGTERM", async () => {
+  console.log("\n🛑 Остановка бота...");
+  await bot.stop();
+  process.exit(0);
+});
 
 main().catch((err) => {
   console.error("Критическая ошибка при запуске бота:", err);
